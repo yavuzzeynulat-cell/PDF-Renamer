@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+build/
+dist/
+installer_output/
+src_backup/
+src_new/
+update_error.log
+launcher_crash.log
+_shot*.png
+*.zip
