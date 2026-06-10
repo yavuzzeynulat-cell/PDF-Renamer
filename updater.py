@@ -302,8 +302,8 @@ def run_update_flow(info: "UpdateInfo", parent_window=None) -> bool:
     tmp_zip = os.path.join(tempfile.gettempdir(), "PDF-Renamer_update.zip")
     if not download_update(info, tmp_zip):
         messagebox.showerror(
-            "Guncelleme basarisiz",
-            "Indirme veya dogrulama basarisiz. Internet baglantisini kontrol et.",
+            "Update failed",
+            "Download or verification failed. Check your internet connection.",
             parent=parent_window,
         )
         return False
@@ -313,10 +313,10 @@ def run_update_flow(info: "UpdateInfo", parent_window=None) -> bool:
     except Exception as e:
         log_path = _log_update_error()
         messagebox.showerror(
-            "Guncelleme basarisiz",
-            f"Dosyalar yazilamadi: {e}\n\n"
-            f"Detaylar: {log_path}\n\n"
-            "Onceki surum korundu.",
+            "Update failed",
+            f"Could not write files: {e}\n\n"
+            f"Details saved to:\n{log_path}\n\n"
+            "Previous version kept.",
             parent=parent_window,
         )
         return False
@@ -324,8 +324,8 @@ def run_update_flow(info: "UpdateInfo", parent_window=None) -> bool:
         _safe_remove(tmp_zip)
 
     messagebox.showinfo(
-        "Guncelleme tamam",
-        f"Surum {info.version} kuruldu. Uygulama yeniden baslatilacak.",
+        "Update complete",
+        f"Version {info.version} installed. The app will now restart.",
         parent=parent_window,
     )
     restart_app()

@@ -57,7 +57,7 @@ def _show_error(message: str) -> None:
         from tkinter import Tk, messagebox
         root = Tk()
         root.withdraw()
-        messagebox.showerror("PDF Renamer - Kritik Hata", message)
+        messagebox.showerror("PDF Renamer - Critical Error", message)
         root.destroy()
     except Exception:
         try:
@@ -106,9 +106,10 @@ def main() -> None:
 
     if not _rollback():
         _show_error(
-            "Uygulama baslatilamadi ve geri yuklenecek onceki surum yok.\n\n"
-            f"Hata:\n{first_err}\n\n"
-            "Lutfen kurulumu tekrar calistir."
+            "The app could not start and there is no previous version "
+            "to restore.\n\n"
+            f"Error:\n{first_err}\n\n"
+            "Please run the installer again."
         )
         sys.exit(1)
 
@@ -119,8 +120,8 @@ def main() -> None:
     except BaseException:
         second_err = traceback.format_exc()
         _show_error(
-            "Uygulama baslatilamadi (geri yuklemeden sonra da).\n\n"
-            f"Ilk hata:\n{first_err}\n\nIkinci hata:\n{second_err}"
+            "The app could not start (even after rollback).\n\n"
+            f"First error:\n{first_err}\n\nSecond error:\n{second_err}"
         )
         sys.exit(1)
 
