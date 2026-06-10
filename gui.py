@@ -8,6 +8,7 @@ No Tk objects are created at import time, so `import gui` is side-effect free.
 from __future__ import annotations
 
 import os
+import json
 import queue
 import threading
 import traceback
@@ -34,6 +35,35 @@ STATUS_LABELS = {
 }
 
 
+# -- kullanici tercihleri (son secilen klasor vb.) kalici saklama -------------
+def _prefs_path() -> str:
+    """Kullaniciya ozel, kurulumdan/guncellemeden bagimsiz ayar dosyasi yolu."""
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    d = os.path.join(base, "PDF-Renamer")
+    try:
+        os.makedirs(d, exist_ok=True)
+    except OSError:
+        pass
+    return os.path.join(d, "prefs.json")
+
+
+def _load_prefs() -> dict:
+    try:
+        with open(_prefs_path(), "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_prefs(prefs: dict) -> None:
+    try:
+        with open(_prefs_path(), "w", encoding="utf-8") as f:
+            json.dump(prefs, f)
+    except Exception:
+        pass
+
+
 class App:
     def __init__(self, root: tk.Tk):
         self.root = root
@@ -44,6 +74,7 @@ class App:
         self._ui_queue: "queue.Queue[tuple]" = queue.Queue()
         self._running = False
         self._ocr_warned = False  # show "OCR unavailable" warning at most once
+        self._prefs = _load_prefs()  # son secilen klasor burada saklanir
         # Onizleme onbellegi: Apply'da tekrar OCR/cikarim yapmamak icin.
         self._cached_plan = None   # son onizlemede bulunan {yol: kod}
         self._cached_sig = None    # o onizlemenin girdi imzasi
@@ -127,17 +158,20 @@ class App:
         self._text(366, 166, "TEXT TO ADD  (after the number, no space)",
                    theme.tkfont(9, "bold"), theme.SLATE)
 
-        # example box (slim, single row)
+        # example box (slim, single row) - icerik seride DIKEY ORTALI (anchor=w)
         self.ex_y = 230
-        box = theme.rounded_rect((self.fullw, 42), 12,
+        box_h = 42
+        cy = self.ex_y + box_h // 2
+        box = theme.rounded_rect((self.fullw, box_h), 12,
                                  (theme.ACCENT[0], theme.ACCENT[1], theme.ACCENT[2], 22),
                                  theme.ACCENT + (90,), 1)
         self.canvas.create_image(self.cl, self.ex_y, image=self._mk(box), anchor="nw")
-        self._text(self.cl + 16, self.ex_y + 15, "EXAMPLE OUTPUT",
-                   theme.tkfont(8, "bold"), theme.ACCENT_HEX)
-        self.ex_id = self._text(self.cl + 150, self.ex_y + 12, "",
+        self._text(self.cl + 16, cy, "EXAMPLE OUTPUT",
+                   theme.tkfont(8, "bold"), theme.ACCENT_HEX, anchor="w")
+        # Dosya adi seritte hem dikey hem yatay ORTALI.
+        self.ex_id = self._text(self.cl + self.fullw // 2, cy, "",
                                 theme.tkfont(13, "semibold"), theme.INK,
-                                width=self.fullw - 170)
+                                anchor="center")
 
         self._text(self.cl, 284, "OPTIONS", theme.tkfont(9, "bold"), theme.SLATE)
 
@@ -148,7 +182,10 @@ class App:
                   font=theme.tkfont(12), fg=theme.INK, bg="white",
                   insertbackground=theme.ACCENT_HEX)
 
-        self.var_folder = tk.StringVar(value=os.getcwd())
+        # Acilista son secilen klasoru getir (varsa ve hala mevcutsa).
+        last = self._prefs.get("folder")
+        start_folder = last if (last and os.path.isdir(last)) else os.getcwd()
+        self.var_folder = tk.StringVar(value=start_folder)
         e1 = tk.Entry(self.root, textvariable=self.var_folder, **kw)
         self.canvas.create_window(self.cl, 118, anchor="nw", window=e1,
                                   width=self.fullw - 118, height=36)
@@ -264,6 +301,13 @@ class App:
                                     title="Choose folder")
         if d:
             self.var_folder.set(d)
+            self._remember_folder(d)
+
+    def _remember_folder(self, folder):
+        """Secilen klasoru kalici kaydet ki bir sonraki acilista secili gelsin."""
+        if folder and os.path.isdir(folder):
+            self._prefs["folder"] = folder
+            _save_prefs(self._prefs)
 
     def _settings(self, dry_run):
         return Settings(
@@ -323,6 +367,7 @@ class App:
         if not os.path.isdir(folder):
             messagebox.showerror("Error", "Please choose a valid folder.")
             return
+        self._remember_folder(folder)
         s = self._settings(dry_run)
         self._last_settings = s
         # Apply ise ve gecerli (ayni imzali) bir onizleme onbellegi varsa,

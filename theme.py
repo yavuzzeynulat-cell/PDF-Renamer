@@ -134,9 +134,6 @@ def splash_image(w, h, title, subtitle):
     sb = d.textbbox((0, 0), subtitle, font=sf)
     d.text(((w - (sb[2] - sb[0])) / 2 - sb[0], h * 0.56), subtitle, font=sf,
            fill=ACCENT_HEX)
-    # accent underline
-    d.rounded_rectangle([w / 2 - 30, h * 0.50, w / 2 + 30, h * 0.50 + 4], radius=2,
-                        fill=ACCENT + (255,))
     # yuvarlak koseler: disari saydam (kare gorunumu giderir)
     mask = Image.new("L", (w, h), 0)
     ImageDraw.Draw(mask).rounded_rectangle([0, 0, w - 1, h - 1], radius=26, fill=255)
