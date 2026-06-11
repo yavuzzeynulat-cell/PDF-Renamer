@@ -17,10 +17,39 @@ Hicbir motor yoksa OCR SESSIZCE atlanir; asla hata firlatilmaz.
 """
 from __future__ import annotations
 
+import os
 import pdfplumber
 
 # OCR icin rasterize DPI'si. 300, basili metinde guvenilir okuma saglar.
 _OCR_DPI = 300
+
+
+# --------------------------------------------------------------------------- #
+# Tani (diagnostic) gunlugu
+# --------------------------------------------------------------------------- #
+# Bazi makinelerde (eksik/bozuk kurulum, antivirus karantinasi, eksik cmap)
+# metin cikarma SESSIZCE bos doner; uygulama "kod bulunamadi" der ve neden
+# oldugu anlasilamaz. Asagidaki gunluk, her dosya icin hangi motorun ne
+# kadar metin urettigini ve olusan hatalari %LOCALAPPDATA%\PDF-Renamer\
+# diagnostics.log dosyasina yazar. ASLA hata firlatmaz / akisi yavaslatmaz.
+def _diag_path() -> str:
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    d = os.path.join(base, "PDF-Renamer")
+    try:
+        os.makedirs(d, exist_ok=True)
+    except OSError:
+        pass
+    return os.path.join(d, "diagnostics.log")
+
+
+def _diag(msg: str) -> None:
+    """Tek satir tani gunlugu yazar (en iyi caba; asla patlamaz)."""
+    try:
+        from datetime import datetime
+        with open(_diag_path(), "a", encoding="utf-8") as f:
+            f.write(f"{datetime.now().isoformat(timespec='seconds')}  {msg}\n")
+    except Exception:
+        pass
 
 # RapidOCR motoru pahalidir; bir kez kurulup tekrar kullanilir (toplu islerde
 # her dosya icin yeniden baslatmamak icin).
@@ -64,7 +93,8 @@ def _get_rapid_engine():
         try:
             from rapidocr_onnxruntime import RapidOCR
             _RAPID_ENGINE = RapidOCR()
-        except Exception:
+        except Exception as exc:
+            _diag(f"RapidOCR init FAILED: {exc!r}")
             _RAPID_ENGINE = None
     return _RAPID_ENGINE
 
@@ -85,6 +115,41 @@ def _page_text(page) -> str:
             for cell in row:
                 if cell:
                     parts.append(str(cell))
+
+    return "\n".join(parts)
+
+
+# --------------------------------------------------------------------------- #
+# Yedek metin motoru (PyMuPDF / fitz) - OCR DEGIL, sadece farkli bir okuyucu
+# --------------------------------------------------------------------------- #
+def _text_with_fitz(pdf_path: str, all_pages: bool) -> str:
+    """PDF metnini PyMuPDF (fitz) ile cikarir; pdfplumber/pdfminer'a YEDEK.
+
+    pdfplumber, pdfminer.six uzerinden okur. Bazi makinelerde pdfminer
+    sessizce bos doner (bozuk/eksik kurulum, AV karantinasi, eksik cmap
+    verisi). fitz tamamen ayri bir motordur (pdfium tabanli); o makinede
+    saglamsa basili metni yine de cikarir. Bu sayede tek bir bilesen bozulsa
+    bile uygulama sessizce "kod bulunamadi" demez.
+
+    OCR DEGILDIR: yalnizca metin katmani olan PDF'lerden hizlica metin okur.
+    """
+    try:
+        import fitz  # PyMuPDF
+    except Exception as exc:
+        _diag(f"fitz import FAILED: {exc!r}")
+        return ""
+
+    parts: list[str] = []
+    try:
+        with fitz.open(pdf_path) as doc:
+            pages = list(doc) if all_pages else [doc[0]]
+            for page in pages:
+                t = page.get_text()
+                if t:
+                    parts.append(t)
+    except Exception as exc:
+        _diag(f"fitz get_text FAILED on {os.path.basename(pdf_path)}: {exc!r}")
+        return "\n".join(parts)
 
     return "\n".join(parts)
 
@@ -228,7 +293,39 @@ def extract_text(pdf_path: str, *, all_pages: bool = True,
 
     text = "\n".join(parts)
 
+    name = os.path.basename(pdf_path)
+    matched = (match is not None and match(text))
+
+    # YEDEK MOTOR (ucuz, OCR DEGIL): pdfplumber/pdfminer hicbir sey bulamadiysa
+    # (bos metin VEYA aranan kod yok), tamamen ayri bir motorla (PyMuPDF/fitz)
+    # tekrar dene. Bazi makinelerde pdfminer sessizce bos doner; fitz saglamsa
+    # basili metni yine de cikarir. Yalnizca hizli yol basarisiz oldugunda
+    # calisir; bu yuzden olagan durumda hiz etkilenmez.
+    if (not text.strip()) or (match is not None and not matched):
+        pp_chars = len(text)
+        ftext = _text_with_fitz(pdf_path, all_pages)
+        if ftext.strip():
+            fitz_has_code = (match is not None and match(ftext))
+            if not text.strip():
+                # pdfplumber bostu: fitz metnini kullan.
+                text = ftext
+                _diag(f"{name}: pdfplumber=EMPTY fitz_chars={len(ftext)} "
+                      f"fitz_has_code={fitz_has_code}")
+            elif fitz_has_code:
+                # pdfplumber kodu bulamadi ama fitz buldu: birlestir.
+                text = text + "\n" + ftext
+                _diag(f"{name}: pdfplumber_no_code fitz RESCUED code "
+                      f"(pp_chars={pp_chars} fitz_chars={len(ftext)})")
+            else:
+                _diag(f"{name}: pdfplumber_no_code fitz_no_code "
+                      f"pp_chars={pp_chars} fitz_chars={len(ftext)}")
+        else:
+            _diag(f"{name}: pdfplumber_chars={pp_chars} fitz=EMPTY "
+                  f"(metin katmani yok olabilir; OCR gerekebilir)")
+
+    # OCR (pahali): metin katmani olmayan TARANMIS sayfalar icin son care.
     if not text.strip() and use_ocr and ocr_available():
         text = _ocr_pages(pdf_path, all_pages, ocr_lang)
+        _diag(f"{name}: OCR ran -> chars={len(text)}")
 
     return text
