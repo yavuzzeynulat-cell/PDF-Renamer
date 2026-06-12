@@ -12,6 +12,12 @@ DEFAULT_PATTERN: str = r"26437-LAB-[A-Z0-9-]+"
 # Characters that are illegal in Windows filenames.
 _ILLEGAL_FILENAME_CHARS = re.compile(r'[\\/*?:"<>|]')
 
+# Tire/cizgi varyantlari (en-dash, em-dash, kisa cizgi, eksi, bozuk-decode
+# yer tutucusu). Bazi PDF'ler kodlarda normal tire yerine bunlari kullanir;
+# bulunan kodu dosya adina yazmadan once hepsini NORMAL tire'ye ceviririz ki
+# dosya adlari tutarli olsun. Normal tireli kodlar degismeden kalir.
+_DASH_VARIANTS = re.compile("[‐‑‒–—―−�]")
+
 
 def find_code(
     text: str, pattern: str = DEFAULT_PATTERN, *, ignore_case: bool = False
@@ -34,10 +40,14 @@ def find_code(
     if match is None:
         return None
 
+    # Tire/cizgi varyantlarini normal tire'ye normalize et (dosya adi tutarli
+    # olsun). Normal tireli kodlar degismez.
+    code = _DASH_VARIANTS.sub("-", match.group(0))
+
     # Safety polish: drop a single trailing hyphen or whitespace left by a
     # greedy match (e.g. "26437-LAB-001-"). Never strips alphanumerics, so
     # matches like "26437-LAB-001" are unchanged.
-    return match.group(0).rstrip("- \t\r\n") or None
+    return code.rstrip("- \t\r\n") or None
 
 
 def clean_filename(name: str) -> str:

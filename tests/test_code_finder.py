@@ -97,3 +97,32 @@ def test_default_behavior_matches_original(text):
 )
 def test_clean_filename_matches_original(name):
     assert clean_filename(name) == _temiz_dosya_adi_original(name)
+
+
+# --- Tire/cizgi varyantlari (en-dash vb.) toleransi ------------------------- #
+# Bazi PDF'ler kodlarda normal tire (-) yerine en-dash (–) kullanir; pdfminer
+# bunlari oldugu gibi cikarir ve eski desen hic eslesmezdi. Asagidaki testler,
+# uygulamanin GERCEK yolu (Settings.build_pattern) ile bu kodlarin yakalandigini
+# ve dosya adina yazilirken normal tire'ye normalize edildigini dogrular.
+def _app_pattern():
+    from config import Settings
+    return Settings().build_pattern()
+
+
+def test_en_dash_code_is_found_and_normalized():
+    # Belgedeki kod: en-dash ayracli (gercek 76543.pdf ornegi).
+    text = "Doc. No: 26437–LAB–004–EWS–MST-02000\nNumber:"
+    code = find_code(text, _app_pattern(), ignore_case=True)
+    assert code == "26437-LAB-004-EWS-MST-02000"  # normal tire'ye normalize
+
+
+def test_normal_hyphen_code_unchanged_with_app_pattern():
+    # Normal tireli belgelerde davranis BIREBIR ayni kalmali.
+    assert find_code("x 26437-LAB-001 y", _app_pattern(),
+                     ignore_case=True) == "26437-LAB-001"
+
+
+def test_app_pattern_does_not_match_other_prefix():
+    # Ayni satirdaki RIA kodu (farkli onek) yanlislikla eslesmemeli.
+    assert find_code("26437-RIA-04D-EW-REF-MW-00930",
+                     _app_pattern(), ignore_case=True) is None
