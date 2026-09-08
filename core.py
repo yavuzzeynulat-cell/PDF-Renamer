@@ -27,6 +27,7 @@ class FileResult:
     code: Optional[str]           # Bulunan kod (yoksa None)
     status: str                   # 'renamed' | 'already' | 'not_found' | 'error' | 'preview'
     message: str                  # Kullaniciya gosterilecek aciklama
+    path: str = ""                # Islenen dosyanin TAM YOLU (islem sirasinda doldurulur)
 
 
 @dataclass
@@ -137,18 +138,19 @@ def process_one(pdf_path: str, settings: Settings,
                       f"Renamed to '{outcome.new_name}'")
 
 
-def process_folder(settings: Settings,
+def _process_paths(paths: list[str],
+                   settings: Settings,
                    progress: Optional[ProgressCallback] = None,
                    code_overrides: Optional[dict] = None) -> Summary:
-    """Klasordeki tum PDF'leri isler ve Summary dondurur.
+    """Verilen PDF yollarini sirayla isler (ortak cekirdek).
+
+    Dosyalar YERINDE islenir: her dosya kendi bulundugu klasorde yeniden
+    adlandirilir, hicbir dosya baska bir yere tasinmaz/kopyalanmaz.
 
     Basarili (gercek) yeniden adlandirmalar, GERI ALMA icin her dosyanin
     bulundugu klasore log olarak yazilir (dry_run'da yazilmaz).
     """
-    folder = settings.effective_folder()
     summary = Summary()
-
-    paths = list_pdfs(folder, recursive=settings.recursive)
     total = len(paths)
 
     # Geri-alma logu icin: her klasor icin (eski, yeni) ciftleri
@@ -156,6 +158,7 @@ def process_folder(settings: Settings,
 
     for index, path in enumerate(paths, start=1):
         result = process_one(path, settings, code_overrides=code_overrides)
+        result.path = path
         # Apply asamasinda yeniden kullanmak icin bulunan kodu kaydet (None dahil).
         summary.plan[path] = result.code
 
@@ -183,3 +186,54 @@ def process_folder(settings: Settings,
                 renamer.write_log(fdir, entries)
 
     return summary
+
+
+def process_folder(settings: Settings,
+                   progress: Optional[ProgressCallback] = None,
+                   code_overrides: Optional[dict] = None) -> Summary:
+    """Klasordeki tum PDF'leri isler ve Summary dondurur."""
+    folder = settings.effective_folder()
+    paths = list_pdfs(folder, recursive=settings.recursive)
+    return _process_paths(paths, settings, progress, code_overrides)
+
+
+def expand_pdf_paths(items, recursive: bool = False) -> list[str]:
+    """Dosya/klasor karisik bir listeyi, tekrarsiz PDF tam-yol listesine cevirir.
+
+    - Klasorler icindeki PDF'lerle genisletilir.
+    - PDF olmayan dosyalar elenir.
+    - Sira korunur, ayni dosya iki kez girmez (Windows'ta buyuk/kucuk harf farki
+      ayni dosya sayilir).
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+
+    def _add(p: str) -> None:
+        key = os.path.normcase(os.path.abspath(p))
+        if key not in seen:
+            seen.add(key)
+            out.append(p)
+
+    for item in items:
+        if not item:
+            continue
+        p = os.path.abspath(item)
+        if os.path.isdir(p):
+            for f in list_pdfs(p, recursive=recursive):
+                _add(f)
+        elif os.path.isfile(p) and p.lower().endswith(".pdf"):
+            _add(p)
+    return out
+
+
+def process_files(paths,
+                  settings: Settings,
+                  progress: Optional[ProgressCallback] = None,
+                  code_overrides: Optional[dict] = None) -> Summary:
+    """Acikca verilen PDF'leri (veya klasorleri) YERINDE isler.
+
+    Surukle-birak icin kullanilir: dosyalar bulunduklari yerde kalir, sadece
+    adlari degisir. `settings.folder` bu akista kullanilmaz.
+    """
+    return _process_paths(expand_pdf_paths(paths, settings.recursive),
+                          settings, progress, code_overrides)

@@ -1,4 +1,4 @@
-# PDF Otomatik İsimlendirici V2.0
+# PDF Otomatik İsimlendirici V2.1
 
 PDF'lerin içindeki doküman kodunu (varsayılan: `26437-LAB-...`) okuyup dosyayı
 otomatik olarak `<kod>.pdf` şeklinde yeniden adlandıran araç.
@@ -28,7 +28,17 @@ otomatik olarak `<kod>.pdf` şeklinde yeniden adlandıran araç.
 | 🔁 **Güvenli çakışma** | Aynı koddan çok dosya → `kod (1).pdf`, `kod (2).pdf` (eskisi tek `kopya_` ile bozuluyordu). |
 | 👁️ **Önizleme (dry-run)** | Hiçbir şeyi değiştirmeden ne olacağını gösterir. |
 | ↩️ **Geri Al** | Son toplu yeniden adlandırmayı tek tıkla geri alır (log dosyası ile). |
-| 🔍 **OCR (opsiyonel)** | Taranmış/resim PDF'lerden de kod okur (Tesseract gerekir). |
+| 🔍 **OCR** | Taranmış/resim PDF'lerden de kod okur (RapidOCR programla birlikte gelir). |
+
+### v2.1 ile gelenler
+
+| Özellik | Açıklama |
+|---------|----------|
+| 🖱️ **Sürükle-bırak** | PDF'leri (veya klasörleri) pencereye bırak — hepsi listeye düşer ve önizlenir. **Dosyalar yerinden oynamaz**, bulundukları klasörde yeniden adlandırılır. |
+| ➕ **+ Add PDFs** | Sürükle-bırak yerine dosya seçme penceresiyle de aynı işi yapar. |
+| 👆 **Çift tık / sağ tık** | Satıra çift tıkla PDF açılır; sağ tık menüsünde *PDF'i aç*, *Klasörde göster*, *Yeni adı kopyala*. |
+| 🔎 **Filtre + arama** | `All / Renamed / Already OK / Not found / Error` düğmeleri (canlı sayaçlı) ve anlık arama kutusu. |
+| 📤 **Export** | Görünen satırları CSV olarak kaydeder (UTF-8 BOM + `;` — Excel'de çift tıkla düzgün açılır). |
 
 ---
 
@@ -40,17 +50,14 @@ python -m pip install -r requirements.txt
 
 `pdfplumber`, `PyMuPDF`, `Pillow` zorunludur. `pytesseract` yalnızca OCR için.
 
-### OCR Kurulumu (yalnızca taranmış PDF'ler için, opsiyonel)
+### OCR (yalnızca taranmış PDF'ler için)
 
-Taranmış (resim) PDF'lerde metin katmanı yoktur; bunları okumak için Tesseract
-motoru gerekir. **Kurulu değilse program bozulmaz — sadece o tür dosyaları
-"bulunamadı" olarak işaretler.**
+Taranmış (resim) PDF'lerde metin katmanı yoktur. Bunlar için **RapidOCR**
+kullanılır ve kurulum paketinin içinde gelir — son kullanıcının ayrıca
+bir şey kurması gerekmez (Tesseract gerekmez).
 
-1. Tesseract'ı indir ve kur: https://github.com/UB-Mannheim/tesseract/wiki
-   (Kurulumda **Turkish** dil paketini de seçin.)
-2. Kurulum dizinini PATH'e ekleyin (örn. `C:\Program Files\Tesseract-OCR`).
-3. `python -m pip install pytesseract`
-4. Arayüzde **"Taranmış PDF için OCR dene"** kutusunu işaretleyin.
+Arayüzde **OCR (scanned PDFs)** düğmesini açmanız yeterli. OCR yavaş
+olduğu için varsayılan olarak kapalıdır.
 
 ---
 
@@ -61,8 +68,11 @@ config.py        # Merkezi ayarlar (Settings)
 extractor.py     # PDF'ten metin çıkarma (tüm sayfalar + OCR yedeği)
 code_finder.py   # Kod tanıma (esnek desen) + dosya adı temizleme
 renamer.py       # Güvenli yeniden adlandırma + log + geri-alma
-core.py          # Orkestrasyon: yukarıdakileri birleştirir (process_folder)
+core.py          # Orkestrasyon: klasör (process_folder) + dosya listesi (process_files)
 gui.py           # Tkinter pencereli arayüz
+dnd.py           # Windows sürükle-bırak kancası (WM_DROPFILES, ek paket yok)
+updater.py       # GitHub release'lerinden otomatik güncelleme
+launcher.py      # EXE giriş noktası: uygulamayı src/ klasöründen yükler
 cli.py           # Konsol sürümü (eski tarz)
 main.py          # Giriş noktası (GUI'yi açar)
 v1_original.py   # Orijinal V1.0 kodu (yedek)
@@ -75,8 +85,9 @@ tests/           # Birim + entegrasyon testleri ve örnek PDF'ler
 python -m pytest tests\ -v
 ```
 
-44 test: birim (extractor, code_finder, renamer) + uçtan uca entegrasyon
-(eski davranışın korunması, çok sayfa, çakışma, önizleme, geri-alma).
+67 test: birim (extractor, code_finder, renamer, sürükle-bırak kancası) +
+uçtan uca entegrasyon (eski davranışın korunması, çok sayfa, çakışma,
+önizleme, geri-alma, dosyaların yerinde işlenmesi).
 
 ---
 

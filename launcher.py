@@ -8,7 +8,7 @@ PyInstaller bunu PDF-Renamer.exe olarak derler. Gorevi:
      yukleyip BIR kez yeniden dener.
 
 src/ icindeki kod dosyalari (main, gui, core, extractor, code_finder, renamer,
-config, theme, cli, updater, version.txt) pakete GOMULMEZ; exe'nin yaninda durur
+config, theme, cli, updater, dnd, version.txt) pakete GOMULMEZ; exe'nin yaninda durur
 ve updater.apply_update() ile guncellenir. Agir bagimliliklar (onnxruntime,
 rapidocr, pdfplumber, fitz...) exe'de gomulu kalir.
 """
@@ -42,7 +42,7 @@ import traceback
 
 # src/ guncellenince yeniden yuklenmesi gereken uygulama modulleri.
 _APP_MODULES = ("main", "gui", "core", "extractor", "code_finder",
-                "renamer", "config", "theme", "cli", "updater")
+                "renamer", "config", "theme", "cli", "updater", "dnd")
 
 
 def _app_dir() -> str:

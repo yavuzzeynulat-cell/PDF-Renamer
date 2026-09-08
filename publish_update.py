@@ -29,7 +29,8 @@ import zipfile
 # src/ icine giden (guncellenebilir) dosyalar. Agir bagimliliklar EXE'de gomulu.
 SRC_FILES = [
     "main.py", "gui.py", "core.py", "extractor.py", "code_finder.py",
-    "renamer.py", "config.py", "theme.py", "cli.py", "updater.py", "version.txt",
+    "renamer.py", "config.py", "theme.py", "cli.py", "updater.py", "dnd.py",
+    "version.txt",
 ]
 
 

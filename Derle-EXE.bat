@@ -26,6 +26,7 @@ copy /Y config.py      "%SRCDIR%\" >nul
 copy /Y theme.py       "%SRCDIR%\" >nul
 copy /Y cli.py         "%SRCDIR%\" >nul
 copy /Y updater.py     "%SRCDIR%\" >nul
+copy /Y dnd.py         "%SRCDIR%\" >nul
 copy /Y version.txt    "%SRCDIR%\" >nul
 
 echo.
