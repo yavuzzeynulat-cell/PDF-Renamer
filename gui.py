@@ -1075,11 +1075,58 @@ class App:
         else:
             self._set_status("Ready.")
 
-    # -- tam kurulum indirme (arka planda, ilerlemeli) -----------------------
+    # -- tam kurulum indirme (arka planda, kendi penceresinde) ---------------
+    def _open_download_window(self, version):
+        """Indirme icin ayri, gormezden gelinemeyecek bir pencere.
+
+        Ana penceredeki ince ilerleme cubugu yetmiyordu: kullanici "evet"
+        dedikten sonra ekranda hicbir sey degismiyor ve program calismiyor
+        saniliyordu. 110 MB'lik bir indirme kendi penceresini hak ediyor.
+        """
+        win = tk.Toplevel(self.root)
+        win.title("Updating PDF Clerk")
+        win.resizable(False, False)
+        win.transient(self.root)
+        win.configure(bg="white")
+        win.protocol("WM_DELETE_WINDOW", lambda: None)   # yarida kapatilmasin
+
+        tk.Label(win, text="Downloading version " + version,
+                 font=theme.tkfont(12, "semibold"), fg=theme.INK,
+                 bg="white").pack(padx=28, pady=(24, 4), anchor="w")
+        self._dl_label = tk.Label(win, text="Starting...",
+                                  font=theme.tkfont(10), fg=theme.SLATE,
+                                  bg="white")
+        self._dl_label.pack(padx=28, anchor="w")
+        self._dl_bar = ttk.Progressbar(
+            win, style="Frost.Horizontal.TProgressbar", mode="indeterminate",
+            length=360)
+        self._dl_bar.pack(padx=28, pady=(12, 8))
+        self._dl_bar.start(12)
+        tk.Label(win, text="The app will close and reopen by itself.",
+                 font=theme.tkfont(9), fg=theme.MUTED,
+                 bg="white").pack(padx=28, pady=(0, 22), anchor="w")
+
+        win.update_idletasks()
+        x = self.root.winfo_rootx() + (self.root.winfo_width() - win.winfo_width()) // 2
+        y = self.root.winfo_rooty() + (self.root.winfo_height() - win.winfo_height()) // 3
+        win.geometry("+{0}+{1}".format(max(x, 0), max(y, 0)))
+        win.lift()
+        win.grab_set()
+        return win
+
+    def _close_download_window(self):
+        window = getattr(self, "_dl_win", None)
+        if window is not None:
+            try:
+                window.grab_release()
+                window.destroy()
+            except tk.TclError:
+                pass
+        self._dl_win = None
+
     def _start_setup_download(self, info):
         self._set_running(True)
-        self.progress.configure(value=0, maximum=100)
-        self._set_status("Downloading update...")
+        self._dl_win = self._open_download_window(info.version)
         threading.Thread(target=self._setup_worker, args=(info,),
                          daemon=True).start()
 
@@ -1095,15 +1142,22 @@ class App:
         self._ui_queue.put(("dl_done", ok, dest, info))
 
     def _on_download_progress(self, done, total):
+        mb = 1048576
+        if getattr(self, "_dl_win", None) is None:
+            return
         if total:
-            self.progress.configure(maximum=total, value=done)
-            self._set_status("Downloading update...  {0} / {1} MB".format(
-                done // 1048576, total // 1048576))
+            if str(self._dl_bar.cget("mode")) == "indeterminate":
+                self._dl_bar.stop()
+                self._dl_bar.configure(mode="determinate", maximum=total)
+            self._dl_bar.configure(value=done)
+            text = "{0} of {1} MB".format(done // mb, total // mb)
         else:
-            self._set_status("Downloading update...  {0} MB".format(
-                done // 1048576))
+            text = "{0} MB".format(done // mb)
+        self._dl_label.configure(text=text)
+        self._set_status("Downloading update...  " + text)
 
     def _on_download_done(self, ok, path, info):
+        self._close_download_window()
         self._set_running(False)
         if not ok:
             self._set_status("Update failed.")
