@@ -110,6 +110,15 @@ SETUP = r"C:\tmp\setup.exe"
 APP = r"C:\app\PDF-Renamer.exe"
 
 
+def test_the_installer_writes_a_log_we_can_read_afterwards():
+    """Kurulum basarisiz olursa program coktan kapanmis oluyor ve geriye
+    hicbir iz kalmiyordu. /LOG ile en azindan neden basarisiz oldugu
+    diskte kaliyor."""
+    joined = " ".join(updater.build_install_command(SETUP, APP))
+    assert "/LOG=" in joined
+    assert updater.INSTALL_LOG_NAME in joined
+
+
 def test_the_installer_shows_its_progress():
     """/VERYSILENT hicbir sey gostermiyordu: program kapaniyor, arkada
     sessizce kuruluyor, kullanici ne oldugunu anlayamiyordu. /SILENT

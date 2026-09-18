@@ -43,6 +43,8 @@ ASSET_NAME = "src.zip"
 # Tam kurulum dosyasi. src.zip exe'nin YANINDAKI kodu degistirir; exe'nin
 # kendisi (ve icine gomulu lisans kapisi) ancak bununla yenilenir.
 SETUP_ASSET_NAME = "PDF-Renamer-Setup.exe"
+# Kurulum logu: basarisiz bir guncellemeden geriye tek kalan sey.
+INSTALL_LOG_NAME = "install.log"
 _UA = "PDF-Renamer-Updater"
 
 
@@ -489,10 +491,23 @@ def build_install_command(setup_path: str, relaunch_path: str = "") -> list:
        SIRAYLA calistigi icin kurulum bitince programi biz aciyoruz.
     """
     parts = ['ping 127.0.0.1 -n 3 >nul',
-             '"' + setup_path + '" /SILENT /NORESTART']
+             '"' + setup_path + '" /SILENT /NORESTART /LOG="'
+             + install_log_path() + '"']
     if relaunch_path:
         parts.append('start "" "' + relaunch_path + '"')
     return ["cmd", "/c", " & ".join(parts)]
+
+
+def install_log_path() -> str:
+    """Kurulum logunun yolu. Kullanici ayarlariyla ayni klasorde durur ki
+    kurulum programi silse bile kaybolmasin."""
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    folder = os.path.join(base, "PDF-Renamer")
+    try:
+        os.makedirs(folder, exist_ok=True)
+    except OSError:
+        folder = tempfile.gettempdir()
+    return os.path.join(folder, INSTALL_LOG_NAME)
 
 
 def install_setup(setup_path: str):
@@ -502,9 +517,16 @@ def install_setup(setup_path: str):
     os._exit(): Tcl/Tk kapanis temizligi gecikebiliyor; bu, sureci ve DLL
     kilitlerini aninda birakir.
     """
+    # Ana program hemen cikiyor. Cocuk surec ondan BAGIMSIZ baslamali,
+    # yoksa bazi ortamlarda (is nesnesine bagli oturumlarda) ebeveynle
+    # birlikte oluyor ve kurulum hic calismamis gibi gorunuyor.
     kwargs = {"close_fds": True}
-    if hasattr(subprocess, "CREATE_NO_WINDOW"):
-        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    flags = 0
+    for name in ("DETACHED_PROCESS", "CREATE_NEW_PROCESS_GROUP",
+                 "CREATE_BREAKAWAY_FROM_JOB"):
+        flags |= getattr(subprocess, name, 0)
+    if flags:
+        kwargs["creationflags"] = flags
     # Kurulum bitince geri acilacak program: donmus halde kendi exe'miz.
     relaunch = sys.executable if getattr(sys, "frozen", False) else ""
     subprocess.Popen(build_install_command(setup_path, relaunch), **kwargs)
