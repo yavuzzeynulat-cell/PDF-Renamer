@@ -152,23 +152,30 @@ def test_without_a_relaunch_path_nothing_extra_is_started():
 
 # -- hangi yol secilir -------------------------------------------------------
 
-def test_a_release_with_a_setup_takes_the_full_install_path():
-    assert updater.decide_update_kind(_info(SETUP_SHA)) == "setup"
+def test_a_release_with_a_setup_does_not_force_a_full_install(monkeypatch):
+    """Eskiden setup'li her release tam kurulum zorluyordu; bu, kapisi olan
+    makineleri gereksiz yere kirilgan yoldan gecirip takiyordu."""
+    monkeypatch.setattr(updater, "gate_present", lambda: True)
+    assert updater.decide_update_kind(_info(SETUP_SHA)) == "code"
 
 
 def test_a_release_without_a_setup_stays_on_the_code_only_path():
     assert updater.decide_update_kind(_info(None)) == "code"
 
 
-def test_the_user_is_told_a_full_install_is_coming():
+def test_the_user_is_told_a_full_install_is_coming(monkeypatch):
     """Tam kurulum programi kapatip installer calistirir; surpriz olmamali."""
-    msg = updater.update_prompt(_info(SETUP_SHA))
+    monkeypatch.setattr(updater, "gate_present", lambda: True)
+    info = _info(SETUP_SHA)
+    info.notes = updater.FULL_INSTALL_MARKER
+    msg = updater.update_prompt(info)
     assert "9.9.9" in msg
     low = msg.lower()
     assert "install" in low and "close" in low
 
 
-def test_the_code_only_prompt_does_not_promise_an_install():
+def test_the_code_only_prompt_does_not_promise_an_install(monkeypatch):
+    monkeypatch.setattr(updater, "gate_present", lambda: True)
     low = updater.update_prompt(_info(None)).lower()
     assert "restart" in low
 
@@ -210,11 +217,6 @@ def test_a_missing_client_means_the_exe_has_no_gate(monkeypatch):
 def test_a_gateless_exe_must_take_the_full_install(monkeypatch):
     monkeypatch.setattr(updater, "gate_present", lambda: False)
     assert updater.decide_update_kind(_info(SETUP_SHA)) == "required"
-
-
-def test_a_gated_exe_is_merely_offered_the_full_install(monkeypatch):
-    monkeypatch.setattr(updater, "gate_present", lambda: True)
-    assert updater.decide_update_kind(_info(SETUP_SHA)) == "setup"
 
 
 def test_without_a_setup_a_gateless_exe_is_not_nagged(monkeypatch):
@@ -278,3 +280,28 @@ def test_download_setup_passes_the_progress_through(tmp_path, monkeypatch):
     updater.download_setup(_info(SETUP_SHA), str(tmp_path / "s.exe"),
                            progress=lambda d, t: seen.append((d, t)))
     assert seen
+
+
+# -- tam kurulum ISTISNA olmali, kural degil --------------------------------
+#
+# Once her setup'li release tam kurulum zorluyordu. Oysa kapisi olan bir
+# makinenin exe'sini degistirmeye gerek yok: calisan src.zip yolu dururken
+# 110 MB'lik kirilgan yoldan gecirmek yanlisti. Artik tam kurulum yalnizca
+# kapisiz makinelerde, ya da notlarda acikca istendiginde yapiliyor.
+
+def test_a_gated_machine_takes_the_light_code_update(monkeypatch):
+    monkeypatch.setattr(updater, "gate_present", lambda: True)
+    assert updater.decide_update_kind(_info(SETUP_SHA)) == "code"
+
+
+def test_a_gateless_machine_still_must_do_the_full_install(monkeypatch):
+    monkeypatch.setattr(updater, "gate_present", lambda: False)
+    assert updater.decide_update_kind(_info(SETUP_SHA)) == "required"
+
+
+def test_notes_can_demand_a_full_install(monkeypatch):
+    """Exe'nin kendisi degistiginde (yeni bagimlilik gibi) zorunlu kilinabilir."""
+    monkeypatch.setattr(updater, "gate_present", lambda: True)
+    info = _info(SETUP_SHA)
+    info.notes = "Yeni surum\n\n" + updater.FULL_INSTALL_MARKER
+    assert updater.decide_update_kind(info) == "setup"

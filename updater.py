@@ -45,6 +45,10 @@ ASSET_NAME = "src.zip"
 SETUP_ASSET_NAME = "PDF-Renamer-Setup.exe"
 # Kurulum logu: basarisiz bir guncellemeden geriye tek kalan sey.
 INSTALL_LOG_NAME = "install.log"
+# Release notlarina bu yazilirsa, kapisi olan makineler de tam kurulum
+# yapar. Yalnizca EXE'nin kendisi degistiginde (yeni agir bagimlilik,
+# lisans istemcisinde degisiklik) gerekir.
+FULL_INSTALL_MARKER = "FULL_INSTALL"
 _UA = "PDF-Renamer-Updater"
 
 
@@ -415,14 +419,24 @@ def decide_update_kind(info: "UpdateInfo") -> str:
     """'required' | 'setup' | 'code' (saf - test edilir).
 
     required : bu EXE kapisiz ve kurulacak bir setup var. Kapi EXE'nin
-               icinde oldugu icin src.zip onu getiremez; kullanici
-               guncellemeyi atlarsa program izinsiz calismaya devam eder.
-               Bu yuzden atlanamaz.
-    setup    : kapi zaten var, tam kurulum yine de teklif edilir.
-    code     : setup yok, yalnizca kod guncellenir.
+               icinde oldugu icin src.zip onu getiremez; atlanirsa program
+               izinsiz calismaya devam ederdi. Bu yuzden zorunlu.
+    setup    : kapi var ama notlar acikca tam kurulum istiyor (EXE'nin
+               kendisi degismis demektir).
+    code     : normal hal. Yalnizca src.zip iner.
+
+    ONEMLI: once "setup varsa hep tam kurulum" deniyordu. Yanlisti --
+    kapisi olan bir makinenin EXE'sini degistirmeye gerek yok ve 110 MB'lik
+    kurulum yolu, calisan src.zip yolundan cok daha kirilgan. Gereksiz yere
+    o yola sokulan makineler guncellenemeden takildi.
     """
-    if info.setup_url and info.setup_sha256:
-        return "setup" if gate_present() else "required"
+    has_setup = bool(info.setup_url and info.setup_sha256)
+    if not has_setup:
+        return "code"
+    if not gate_present():
+        return "required"
+    if FULL_INSTALL_MARKER in (info.notes or ""):
+        return "setup"
     return "code"
 
 
