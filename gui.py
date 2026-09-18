@@ -16,6 +16,7 @@ import csv
 import json
 import queue
 import subprocess
+import tempfile
 import threading
 import traceback
 from typing import Optional
@@ -814,6 +815,10 @@ class App:
             self._on_error(msg[1], msg[2])
         elif kind == "update":
             self._on_update(msg[1], msg[2])
+        elif kind == "dl":
+            self._on_download_progress(msg[1], msg[2])
+        elif kind == "dl_done":
+            self._on_download_done(msg[1], msg[2], msg[3])
 
     def _add_row(self, r):
         self._push_row({
@@ -1049,10 +1054,16 @@ class App:
                     f"You are on the latest version (v{updater.current_version()}).")
             self._set_status("Ready.")
             return
-        required = updater.decide_update_kind(info) == "required"
+        kind = updater.decide_update_kind(info)
+        required = kind == "required"
         title = "Update required" if required else "New version available"
         if messagebox.askyesno(title, updater.update_prompt(info)):
-            updater.run_update_flow(info, parent_window=self.root)
+            if kind in ("setup", "required"):
+                # Kurulum dosyasi ~110 MB. Arayuz is parcaciginda indirirsek
+                # program dakikalarca donmus gorunur; arka plana aliyoruz.
+                self._start_setup_download(info)
+            else:
+                updater.run_update_flow(info, parent_window=self.root)
         elif required:
             # Bu kopya kapisiz kuruldu; guncellemeyi atlarsa izinsiz
             # calismaya devam ederdi. Atlamaya izin vermiyoruz.
@@ -1063,6 +1074,51 @@ class App:
             self.root.destroy()
         else:
             self._set_status("Ready.")
+
+    # -- tam kurulum indirme (arka planda, ilerlemeli) -----------------------
+    def _start_setup_download(self, info):
+        self._set_running(True)
+        self.progress.configure(value=0, maximum=100)
+        self._set_status("Downloading update...")
+        threading.Thread(target=self._setup_worker, args=(info,),
+                         daemon=True).start()
+
+    def _setup_worker(self, info):
+        dest = os.path.join(tempfile.gettempdir(), updater.SETUP_ASSET_NAME)
+        try:
+            ok = updater.download_setup(
+                info, dest,
+                progress=lambda done, total:
+                    self._ui_queue.put(("dl", done, total)))
+        except Exception:
+            ok = False
+        self._ui_queue.put(("dl_done", ok, dest, info))
+
+    def _on_download_progress(self, done, total):
+        if total:
+            self.progress.configure(maximum=total, value=done)
+            self._set_status("Downloading update...  {0} / {1} MB".format(
+                done // 1048576, total // 1048576))
+        else:
+            self._set_status("Downloading update...  {0} MB".format(
+                done // 1048576))
+
+    def _on_download_done(self, ok, path, info):
+        self._set_running(False)
+        if not ok:
+            self._set_status("Update failed.")
+            messagebox.showerror(
+                "Update failed",
+                "The installer could not be downloaded or verified.\n\n"
+                "Nothing was changed. Check your internet connection "
+                "and try again.", parent=self.root)
+            return
+        messagebox.showinfo(
+            "Installing update",
+            "Version " + info.version + " will now be installed.\n\n"
+            "This window closes, the installer shows its progress, and the "
+            "app opens again by itself when it is done.", parent=self.root)
+        updater.install_setup(path)      # geri donmez
 
     # -- ui state -----------------------------------------------------------
     def _clear(self):

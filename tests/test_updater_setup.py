@@ -82,7 +82,7 @@ def _info(sha):
 def test_a_matching_setup_is_kept(tmp_path, monkeypatch):
     dest = tmp_path / "setup.exe"
     monkeypatch.setattr(updater, "_http_download",
-                        lambda url, d, timeout=30: open(d, "wb").write(SETUP_BYTES))
+                        lambda url, d, timeout=30, progress=None: open(d, "wb").write(SETUP_BYTES))
     assert updater.download_setup(_info(SETUP_SHA), str(dest)) is True
     assert dest.read_bytes() == SETUP_BYTES
 
@@ -90,7 +90,7 @@ def test_a_matching_setup_is_kept(tmp_path, monkeypatch):
 def test_a_tampered_setup_is_rejected_and_deleted(tmp_path, monkeypatch):
     dest = tmp_path / "setup.exe"
     monkeypatch.setattr(updater, "_http_download",
-                        lambda url, d, timeout=30: open(d, "wb").write(b"kotu amacli"))
+                        lambda url, d, timeout=30, progress=None: open(d, "wb").write(b"kotu amacli"))
     assert updater.download_setup(_info(SETUP_SHA), str(dest)) is False
     assert not dest.exists(), "dogrulamayi gecemeyen dosya diskte birakilmamali"
 
@@ -99,7 +99,7 @@ def test_a_setup_without_a_hash_is_never_downloaded(tmp_path, monkeypatch):
     dest = tmp_path / "setup.exe"
     called = []
     monkeypatch.setattr(updater, "_http_download",
-                        lambda url, d, timeout=30: called.append(1))
+                        lambda url, d, timeout=30, progress=None: called.append(1))
     assert updater.download_setup(_info(None), str(dest)) is False
     assert called == [], "hash yokken indirme bile denenmemeli"
 
@@ -227,3 +227,54 @@ def test_a_required_update_says_it_cannot_be_skipped(monkeypatch):
     monkeypatch.setattr(updater, "gate_present", lambda: False)
     low = updater.update_prompt(_info(SETUP_SHA)).lower()
     assert "required" in low
+
+
+# -- indirme ilerlemesi ------------------------------------------------------
+#
+# Kurulum dosyasi ~110 MB. Eskiden arayuz is parcaciginda, ilerleme
+# bildirmeden iniyordu: kullanici "evet" dedikten sonra program dakikalarca
+# donmus gorunuyor, cogu zaman kapatiliyordu.
+
+def test_the_download_reports_how_far_it_has_got(tmp_path, monkeypatch):
+    seen = []
+    payload = b"x" * (200 * 1024)          # 64 KB'lik parcalardan birkac tane
+
+    class FakeResponse:
+        def __init__(self):
+            self._data = payload
+            self._at = 0
+            self.headers = {"Content-Length": str(len(payload))}
+
+        def read(self, size):
+            chunk = self._data[self._at:self._at + size]
+            self._at += len(chunk)
+            return chunk
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(updater.urllib.request, "urlopen",
+                        lambda *a, **k: FakeResponse())
+    dest = tmp_path / "f.bin"
+    updater._http_download("https://x/f", str(dest),
+                           progress=lambda done, total: seen.append((done, total)))
+
+    assert dest.read_bytes() == payload
+    assert seen, "hic ilerleme bildirilmedi"
+    assert seen[-1][0] == len(payload)
+    assert seen[-1][1] == len(payload), "toplam boyut bildirilmeli"
+
+
+def test_download_setup_passes_the_progress_through(tmp_path, monkeypatch):
+    seen = []
+    monkeypatch.setattr(
+        updater, "_http_download",
+        lambda url, d, timeout=30, progress=None: (
+            open(d, "wb").write(SETUP_BYTES),
+            progress and progress(len(SETUP_BYTES), len(SETUP_BYTES))))
+    updater.download_setup(_info(SETUP_SHA), str(tmp_path / "s.exe"),
+                           progress=lambda d, t: seen.append((d, t)))
+    assert seen

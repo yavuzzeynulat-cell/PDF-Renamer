@@ -170,16 +170,30 @@ def check_for_update(timeout: int = 5) -> Optional[UpdateInfo]:
         return None
 
 
-def _http_download(url: str, dest: str, timeout: int = 30) -> None:
-    """`url`'i `dest`'e akitarak indirir. Hata durumunda OSError."""
+def _http_download(url: str, dest: str, timeout: int = 30,
+                   progress=None) -> None:
+    """`url`'i `dest`'e akitarak indirir. Hata durumunda OSError.
+
+    `progress(inen_bayt, toplam_bayt)` her parcada cagrilir. Kurulum dosyasi
+    ~110 MB; ilerleme bildirilmezse program uzun sure donmus gorunuyor.
+    Toplam bilinmiyorsa 0 gonderilir.
+    """
     req = urllib.request.Request(url, headers={"User-Agent": _UA})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
+        try:
+            total = int(resp.headers.get("Content-Length") or 0)
+        except (TypeError, ValueError):
+            total = 0
+        done = 0
         with open(dest, "wb") as f:
             while True:
                 chunk = resp.read(64 * 1024)
                 if not chunk:
                     break
                 f.write(chunk)
+                done += len(chunk)
+                if progress is not None:
+                    progress(done, total)
 
 
 def _sha256_file(path: str) -> str:
@@ -446,7 +460,8 @@ def update_prompt(info: "UpdateInfo") -> str:
     return "\n\n".join(parts)
 
 
-def download_setup(info: "UpdateInfo", dest_path: str, timeout: int = 300) -> bool:
+def download_setup(info: "UpdateInfo", dest_path: str, timeout: int = 300,
+                   progress=None) -> bool:
     """Kurulum dosyasini indirir ve SHA256'yi dogrular.
 
     Ozet yoksa indirme DENENMEZ bile. Tutmazsa dosya silinir ve False doner;
@@ -455,7 +470,8 @@ def download_setup(info: "UpdateInfo", dest_path: str, timeout: int = 300) -> bo
     if not info.setup_url or not info.setup_sha256:
         return False
     try:
-        _http_download(info.setup_url, dest_path, timeout=timeout)
+        _http_download(info.setup_url, dest_path, timeout=timeout,
+                       progress=progress)
     except Exception:
         _safe_remove(dest_path)
         return False
