@@ -10,7 +10,11 @@
 ; Note: build dist\PDF-Renamer.exe first (see Derle-EXE.bat).
 
 #define MyAppName "PDF Renamer"
-#define MyAppVersion "2.0"
+; Surum version.txt'ten okunur; elle tutulursa kayiyor (ornekte "2.0"
+; kalmisti, program 2.1.0 iken).
+#define VerFile = FileOpen("version.txt")
+#define MyAppVersion = Trim(FileRead(VerFile))
+#expr FileClose(VerFile)
 #define MyAppPublisher "Yavuz Zeynula"
 #define MyAppExe "PDF-Renamer.exe"
 
