@@ -383,11 +383,26 @@ def decide_update_kind(info: "UpdateInfo") -> str:
     return "code"
 
 
+def _visible_notes(body: str) -> str:
+    """Notlardan makineye ait satirlari ayiklar.
+
+    'SHA256:' ve 'SETUP_SHA256:' satirlari dogrulama icin var; kullaniciya
+    gosterilen pencerede yalnizca gurultu yapiyorlar.
+    """
+    kept = []
+    for line in (body or "").splitlines():
+        if re.match(r"\s*(SETUP_)?SHA256\s*[:=]", line, re.IGNORECASE):
+            continue
+        kept.append(line)
+    return "\n".join(kept).strip()
+
+
 def update_prompt(info: "UpdateInfo") -> str:
     """Kullaniciya gosterilecek onay metni (saf - test edilir)."""
     parts = ["New version: " + info.version]
-    if info.notes.strip():
-        parts.append(info.notes.strip())
+    notes = _visible_notes(info.notes)
+    if notes:
+        parts.append(notes)
     if decide_update_kind(info) == "setup":
         parts.append("This is a full install: the app will close and the "
                      "installer will run. It may take a few minutes.")

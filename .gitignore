@@ -14,3 +14,6 @@ _shot*.png
 # Lisans anahtari - depo public, ASLA commitlenmez
 license_secret.txt
 *LISANS-ANAHTARI*
+
+# Tani/derleme artiklari
+probe.spec

@@ -136,3 +136,15 @@ def test_the_user_is_told_a_full_install_is_coming():
 def test_the_code_only_prompt_does_not_promise_an_install():
     low = updater.update_prompt(_info(None)).lower()
     assert "restart" in low
+
+
+def test_hash_lines_are_hidden_from_the_user():
+    """Notlardaki SHA256 satirlari makine icin; kullaniciya gosterilmez."""
+    info = updater.UpdateInfo(
+        version="9.9.9",
+        notes="Kumeleme eklendi\n\nSHA256: " + ZIP_SHA + "\nSETUP_SHA256: " + SETUP_SHA,
+        asset_url="u", sha256=ZIP_SHA, setup_url="s", setup_sha256=SETUP_SHA)
+    msg = updater.update_prompt(info)
+    assert "Kumeleme eklendi" in msg
+    assert "SHA256" not in msg
+    assert ZIP_SHA not in msg and SETUP_SHA not in msg
