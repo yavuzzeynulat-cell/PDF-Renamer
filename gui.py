@@ -27,6 +27,7 @@ from PIL import ImageTk
 import theme
 from config import Settings, DEFAULT_PREFIX
 import cluster_tab
+import exporter
 import guide_tab
 import core
 import dnd
@@ -993,10 +994,11 @@ class App:
 
     # -- export -------------------------------------------------------------
     def on_export(self):
-        """Tabloda GORUNEN satirlari CSV olarak kaydeder.
+        """Tabloda GORUNEN satirlari Excel dosyasi olarak kaydeder.
 
-        UTF-8 BOM + noktali virgul: Excel dosyayi cift tiklayinca dogru
-        sutunlara ve bozulmamis Turkce karakterlerle acar.
+        Eskiden CSV yaziliyordu; Excel'in ayraci bolgesel ayardan geldigi
+        icin satirlar bazen tek hucreye dusuyordu. Artik gercek bir .xlsx
+        uretiliyor: hucreler dosyanin icinde tanimli.
         """
         rows = [self._row_meta[iid] for iid in self.tree.get_children()]
         if not rows:
@@ -1004,22 +1006,18 @@ class App:
             return
         path = filedialog.asksaveasfilename(
             title="Export results",
-            defaultextension=".csv",
-            initialfile="pdf-renamer-results.csv",
+            defaultextension=".xlsx",
+            initialfile="pdf-clerk-renamed.xlsx",
             initialdir=self.var_folder.get() or os.getcwd(),
-            filetypes=[("CSV (opens in Excel)", "*.csv")])
+            filetypes=[("Excel workbook", "*.xlsx"), ("CSV", "*.csv")])
         if not path:
             return
+        headers = ["Original", "New name", "Status", "Detail", "Folder"]
+        table = [[row["old"], row["new"], row["label"], row["detail"],
+                  os.path.dirname(row.get("path") or "")] for row in rows]
         try:
-            with open(path, "w", encoding="utf-8-sig", newline="") as fh:
-                writer = csv.writer(fh, delimiter=";")
-                writer.writerow(["Original", "New name", "Status", "Detail",
-                                 "Folder"])
-                for row in rows:
-                    writer.writerow([row["old"], row["new"], row["label"],
-                                     row["detail"],
-                                     os.path.dirname(row.get("path") or "")])
-        except OSError as exc:
+            exporter.save_table(path, headers, table, sheet_title="Renamed")
+        except Exception as exc:
             messagebox.showerror("Export", f"Could not write the file:\n{exc}")
             return
         self._set_status(f"Exported {len(rows)} row(s) to "

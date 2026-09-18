@@ -106,13 +106,39 @@ def test_a_setup_without_a_hash_is_never_downloaded(tmp_path, monkeypatch):
 
 # -- kurulumu baslatma -------------------------------------------------------
 
-def test_the_installer_is_started_silently_after_a_delay():
-    cmd = updater.build_install_command(r"C:\tmp\setup.exe")
-    joined = " ".join(cmd)
-    assert "ping" in joined, "gecikme yok: calisan exe hala kilitli olabilir"
-    assert "/VERYSILENT" in joined
+SETUP = r"C:\tmp\setup.exe"
+APP = r"C:\app\PDF-Renamer.exe"
+
+
+def test_the_installer_shows_its_progress():
+    """/VERYSILENT hicbir sey gostermiyordu: program kapaniyor, arkada
+    sessizce kuruluyor, kullanici ne oldugunu anlayamiyordu. /SILENT
+    ilerleme penceresini gosterir (sihirbaz sayfalari yine yok)."""
+    joined = " ".join(updater.build_install_command(SETUP, APP))
+    assert "/SILENT" in joined
+    assert "/VERYSILENT" not in joined, "sessiz kurulum takip edilemiyor"
     assert "/NORESTART" in joined
-    assert r"C:\tmp\setup.exe" in joined
+    assert SETUP in joined
+
+
+def test_the_installer_is_given_time_to_take_the_file_lock():
+    joined = " ".join(updater.build_install_command(SETUP, APP))
+    assert "ping" in joined, "gecikme yok: calisan exe hala kilitli olabilir"
+
+
+def test_the_app_comes_back_by_itself_after_the_install():
+    """installer.iss'teki [Run] satirinda `skipifsilent` var, yani sessiz
+    kurulumda program yeniden ACILMIYOR. Geri getirmeyi biz ustleniyoruz."""
+    joined = " ".join(updater.build_install_command(SETUP, APP))
+    assert APP in joined
+    assert joined.index("setup.exe") < joined.index("PDF-Renamer.exe"), \
+        "once kurulum bitmeli, sonra program acilmali"
+
+
+def test_without_a_relaunch_path_nothing_extra_is_started():
+    joined = " ".join(updater.build_install_command(SETUP))
+    assert "/SILENT" in joined
+    assert "start" not in joined
 
 
 # -- hangi yol secilir -------------------------------------------------------

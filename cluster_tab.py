@@ -20,6 +20,7 @@ from tkinter import ttk, filedialog, messagebox
 
 import theme
 import cluster
+import exporter
 from config import Settings
 
 STATUS_TAGS = {"copied": "ok", "preview": "ok", "no_match": "gray", "error": "err"}
@@ -254,6 +255,12 @@ class ClusterTab:
 
     def _build_results(self):
         self._text(self.cl, 466, "RESULTS", theme.tkfont(9, "bold"), theme.SLATE)
+        export = self.app._tag(self.canvas.create_image(
+            self.cr, 458, anchor="ne",
+            image=self.app._mk(theme.button_image(110, 28, "Export", "soft"))),
+            "ar")
+        self.canvas.tag_bind(export, "<Button-1>", lambda _e: self.on_export())
+        self.app._cursor(export)
         top = 486
         full = self.cr - self.cl
         cols = ("file", "groups", "status", "msg")
@@ -511,6 +518,32 @@ class ClusterTab:
             "{4} no match, {5} error(s)".format(
                 summary.matched, summary.total, summary.copies, verb,
                 summary.no_match, summary.errors))
+
+    def on_export(self):
+        """Kumeleme sonuclarini Excel dosyasi olarak kaydeder."""
+        items = self.tree.get_children()
+        if not items:
+            messagebox.showinfo("Export", "There is nothing to export yet.",
+                                parent=self.root)
+            return
+        path = filedialog.asksaveasfilename(
+            parent=self.root, title="Export results",
+            defaultextension=".xlsx",
+            initialfile="pdf-clerk-clustered.xlsx",
+            initialdir=self.var_src.get() or os.getcwd(),
+            filetypes=[("Excel workbook", "*.xlsx"), ("CSV", "*.csv")])
+        if not path:
+            return
+        headers = ["File", "Copied into", "Status", "Detail"]
+        table = [list(self.tree.item(i, "values")) for i in items]
+        try:
+            exporter.save_table(path, headers, table, sheet_title="Clustered")
+        except Exception as exc:
+            messagebox.showerror("Export", "Could not write the file:\n"
+                                 + str(exc), parent=self.root)
+            return
+        self.app._set_status("Exported {0} row(s) to {1}".format(
+            len(table), os.path.basename(path)))
 
     def _set_running(self, on: bool):
         self._running = on

@@ -46,7 +46,8 @@ import license_client
 # src/ guncellenince yeniden yuklenmesi gereken uygulama modulleri.
 _APP_MODULES = ("main", "gui", "core", "extractor", "code_finder",
                 "renamer", "config", "theme", "cli", "updater", "dnd",
-                "grouper", "cluster", "cluster_tab", "guide_tab")
+                "grouper", "cluster", "cluster_tab", "guide_tab",
+                "exporter")
 
 
 def _local_version() -> str:

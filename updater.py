@@ -468,20 +468,31 @@ def download_setup(info: "UpdateInfo", dest_path: str, timeout: int = 300) -> bo
     return True
 
 
-def build_install_command(setup_path: str) -> list:
-    """Kurulumcuyu birkac saniye geciktirerek baslatan komut (saf - test edilir).
+def build_install_command(setup_path: str, relaunch_path: str = "") -> list:
+    """Kurulumu baslatan komut (saf - test edilir).
 
-    Calisan surec tkinter icin tcl/tk DLL'lerini yuklu tutuyor. Hemen
-    baslatilan Inno Setup, DLL henuz serbest kalmadigi icin "DeleteFile
-    failed; code 5" veriyor (EDMS_RIA_Print'te gercek kurulumda goruldu).
-    Kisa gecikme bu yarisi bitirir.
+    Uc ayri sorunu birlikte cozuyor:
 
-    `timeout` degil `ping`: konsolsuz (pythonw) sureclerde `timeout`
-    "Input redirection is not supported" deyip hemen cikiyor.
+    1. Gecikme. Calisan surec tkinter icin tcl/tk DLL'lerini yuklu tutuyor.
+       Hemen baslatilan Inno Setup, DLL henuz serbest kalmadigi icin
+       "DeleteFile failed; code 5" veriyor (EDMS_RIA_Print'te gercek
+       kurulumda goruldu). `timeout` degil `ping`: konsolsuz (pythonw)
+       sureclerde `timeout` "Input redirection is not supported" deyip
+       hemen cikiyor.
+
+    2. Gorunurluk. Eskiden /VERYSILENT kullaniliyordu: program kapaniyor,
+       arkada hicbir sey gostermeden kuruluyordu ve kullanici ne oldugunu
+       anlayamiyordu. /SILENT ilerleme penceresini gosterir.
+
+    3. Geri donus. installer.iss'teki [Run] satiri `skipifsilent` tasiyor,
+       yani sessiz kurulumdan sonra programi ACMAZ. cmd komutlari `&` ile
+       SIRAYLA calistigi icin kurulum bitince programi biz aciyoruz.
     """
-    delayed = ('ping 127.0.0.1 -n 3 >nul & "' + setup_path
-               + '" /VERYSILENT /NORESTART')
-    return ["cmd", "/c", delayed]
+    parts = ['ping 127.0.0.1 -n 3 >nul',
+             '"' + setup_path + '" /SILENT /NORESTART']
+    if relaunch_path:
+        parts.append('start "" "' + relaunch_path + '"')
+    return ["cmd", "/c", " & ".join(parts)]
 
 
 def install_setup(setup_path: str):
@@ -494,7 +505,9 @@ def install_setup(setup_path: str):
     kwargs = {"close_fds": True}
     if hasattr(subprocess, "CREATE_NO_WINDOW"):
         kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
-    subprocess.Popen(build_install_command(setup_path), **kwargs)
+    # Kurulum bitince geri acilacak program: donmus halde kendi exe'miz.
+    relaunch = sys.executable if getattr(sys, "frozen", False) else ""
+    subprocess.Popen(build_install_command(setup_path, relaunch), **kwargs)
     os._exit(0)
 
 
@@ -521,8 +534,8 @@ def _run_setup_flow(info: "UpdateInfo", parent_window=None) -> bool:
     messagebox.showinfo(
         "Installing update",
         "Version " + info.version + " will now be installed.\n\n"
-        "The app closes and the installer runs in the background; "
-        "it reopens when finished.",
+        "This window closes, the installer shows its progress, and the app "
+        "opens again by itself when it is done.",
         parent=parent_window,
     )
     install_setup(dest)   # geri donmez

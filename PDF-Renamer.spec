@@ -15,7 +15,8 @@ else:
 binaries = []
 hiddenimports = []
 for _pkg in ('pdfplumber', 'pypdfium2', 'pdfminer', 'fitz',
-             'rapidocr_onnxruntime', 'onnxruntime', 'cv2', 'numpy', 'PIL'):
+             'rapidocr_onnxruntime', 'onnxruntime', 'cv2', 'numpy', 'PIL',
+             'openpyxl'):
     _d, _b, _h = collect_all(_pkg)
     datas += _d
     binaries += _b

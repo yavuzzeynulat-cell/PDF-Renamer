@@ -10,3 +10,6 @@ rapidocr-onnxruntime>=1.4
 # OPSIYONEL eski yedek OCR motoru - yalnizca Tesseract motoru ayrica
 # kuruluysa kullanilir. Gerekli degildir.
 # pytesseract>=0.3.10
+
+# Excel disa aktarim (Export). Yoksa CSV yedegine duser.
+openpyxl>=3.1
