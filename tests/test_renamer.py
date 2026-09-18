@@ -120,3 +120,84 @@ def test_undo_corrupt_log_is_empty(tmp_path):
 
 def test_undo_missing_log_is_empty(tmp_path):
     assert undo_last(str(tmp_path)) == []
+
+
+# ---------------------------------------------------------------------------
+# safe_copy: kumeleme icin guvenli kopyalama (yeniden adlandirmaz, tasimaz)
+# ---------------------------------------------------------------------------
+
+from renamer import safe_copy  # noqa: E402
+
+
+def test_copy_puts_the_file_in_the_target_and_leaves_the_original(tmp_path):
+    src_dir = tmp_path / "kaynak"
+    src_dir.mkdir()
+    _make_pdf(src_dir, "26437-LAB-001.pdf")
+    dest = tmp_path / "Yapilar" / "B0051 Bridge"
+
+    out = safe_copy(str(src_dir / "26437-LAB-001.pdf"), str(dest))
+
+    assert out.status == "copied"
+    assert os.path.exists(dest / "26437-LAB-001.pdf")
+    assert os.path.exists(src_dir / "26437-LAB-001.pdf")  # orijinal yerinde
+
+
+def test_copy_creates_the_target_folder_when_missing(tmp_path):
+    _make_pdf(tmp_path, "a.pdf")
+    dest = tmp_path / "yeni" / "B0051 Bridge"
+    assert not dest.exists()
+
+    safe_copy(str(tmp_path / "a.pdf"), str(dest))
+
+    assert dest.is_dir()
+
+
+def test_copy_keeps_the_original_filename(tmp_path):
+    _make_pdf(tmp_path, "26437-LAB-042.pdf")
+    dest = tmp_path / "out"
+
+    out = safe_copy(str(tmp_path / "26437-LAB-042.pdf"), str(dest))
+
+    assert os.path.basename(out.dest) == "26437-LAB-042.pdf"
+
+
+def test_copy_preserves_the_file_contents(tmp_path):
+    src = tmp_path / "a.pdf"
+    src.write_bytes(b"%PDF-1.4 gercek icerik")
+    dest = tmp_path / "out"
+
+    safe_copy(str(src), str(dest))
+
+    assert (dest / "a.pdf").read_bytes() == b"%PDF-1.4 gercek icerik"
+
+
+def test_copy_never_overwrites_an_existing_file(tmp_path):
+    dest = tmp_path / "out"
+    dest.mkdir()
+    (dest / "a.pdf").write_bytes(b"onceki")
+    src = tmp_path / "a.pdf"
+    src.write_bytes(b"yeni")
+
+    out = safe_copy(str(src), str(dest))
+
+    assert os.path.basename(out.dest) == "a (1).pdf"
+    assert (dest / "a.pdf").read_bytes() == b"onceki"  # dokunulmadi
+    assert (dest / "a (1).pdf").read_bytes() == b"yeni"
+
+
+def test_copy_dry_run_writes_nothing_but_reports_the_plan(tmp_path):
+    _make_pdf(tmp_path, "a.pdf")
+    dest = tmp_path / "out"
+
+    out = safe_copy(str(tmp_path / "a.pdf"), str(dest), dry_run=True)
+
+    assert out.status == "copied"
+    assert os.path.basename(out.dest) == "a.pdf"
+    assert not dest.exists()  # klasor bile acilmadi
+
+
+def test_copy_reports_an_error_for_a_missing_source(tmp_path):
+    out = safe_copy(str(tmp_path / "yok.pdf"), str(tmp_path / "out"))
+
+    assert out.status == "error"
+    assert not (tmp_path / "out").exists()

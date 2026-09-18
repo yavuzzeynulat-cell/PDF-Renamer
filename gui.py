@@ -26,6 +26,7 @@ from PIL import ImageTk
 
 import theme
 from config import Settings, DEFAULT_PREFIX
+import cluster_gui
 import core
 import dnd
 import updater
@@ -280,7 +281,8 @@ class App:
         specs = [("preview", "Preview", "ghost", 150, self.on_preview),
                  ("apply", "Apply", "accent", 150, self.on_apply),
                  ("undo", "Undo", "ghost", 130, self.on_undo),
-                 ("add", "+ Add PDFs", "ghost", 150, self.on_add_files)]
+                 ("add", "+ Add PDFs", "ghost", 150, self.on_add_files),
+                 ("cluster", "Cluster", "soft", 150, self.on_cluster)]
         x = self.cl
         for name, text, kind, w, cmd in specs:
             normal = self._mk(theme.button_image(w, 40, text, kind))
@@ -710,6 +712,14 @@ class App:
         self._paint_drop_banner()
         self._run(dry_run=True)   # once onizleme; degisiklik Apply ile olur
 
+    def on_cluster(self):
+        """Kumeleme penceresini acar (yeniden adlandirmadan ayri bir is).
+
+        Tercihler sozlugu ve kaydetme fonksiyonu paylasilir; boylece kume
+        adlari ve hedef klasor ayni prefs.json dosyasinda yasar.
+        """
+        cluster_gui.open_window(self.root, self._prefs, _save_prefs)
+
     def on_add_files(self):
         """Surukle-birak calismazsa (veya tercih edilmezse) ayni is."""
         if self._running:
@@ -869,7 +879,7 @@ class App:
             return
         if messagebox.askyesno(
                 "New version available",
-                f"New version: {info.version}\n\n{info.notes}\n\nUpdate now?"):
+                updater.update_prompt(info)):
             updater.run_update_flow(info, parent_window=self.root)
         else:
             self._set_status("Ready.")

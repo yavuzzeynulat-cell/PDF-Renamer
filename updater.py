@@ -40,6 +40,9 @@ GITHUB_OWNER = "yavuzzeynulat-cell"
 GITHUB_REPO = "PDF-Renamer"
 RELEASE_API = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
 ASSET_NAME = "src.zip"
+# Tam kurulum dosyasi. src.zip exe'nin YANINDAKI kodu degistirir; exe'nin
+# kendisi (ve icine gomulu lisans kapisi) ancak bununla yenilenir.
+SETUP_ASSET_NAME = "PDF-Renamer-Setup.exe"
 _UA = "PDF-Renamer-Updater"
 
 
@@ -49,6 +52,11 @@ class UpdateInfo:
     notes: str              # release aciklamasi (Turkce, cok satirli)
     asset_url: str          # src.zip dogrudan indirme URL'si
     sha256: Optional[str]   # notlardan okunur; yoksa None
+    # Tam kurulum (istege bagli). SADECE hem dosya hem 64 haneli gecerli bir
+    # SETUP_SHA256 varsa doldurulur; biri eksikse ikisi de None kalir, cunku
+    # dogrulanamayan bir calistirilabilir dosya asla teklif edilmemeli.
+    setup_url: Optional[str] = None
+    setup_sha256: Optional[str] = None
 
 
 def _app_dir() -> str:
@@ -102,7 +110,17 @@ def _parse_sha256(body: str) -> Optional[str]:
     """Release notlarinda 'SHA256: <hex>' arar (buyuk/kucuk harf duyarsiz)."""
     if not body:
         return None
-    m = re.search(r"SHA256\s*[:=]\s*([0-9a-fA-F]{64}|[0-9a-fA-F]+)", body)
+    # Onunde harf/rakam/alt-cizgi OLMAYAN bir SHA256 ara; boylece
+    # "SETUP_SHA256: ..." satiri src.zip'in ozeti sanilmaz.
+    m = re.search(r"(?<![A-Za-z0-9_])SHA256\s*[:=]\s*([0-9a-fA-F]+)", body)
+    return m.group(1).lower() if m else None
+
+
+def _parse_setup_sha256(body: str) -> Optional[str]:
+    """Notlarda 'SETUP_SHA256: <64 hane>' arar. Tam 64 hane sart."""
+    if not body:
+        return None
+    m = re.search(r"SETUP_SHA256\s*[:=]\s*([0-9a-fA-F]{64})", body)
     return m.group(1).lower() if m else None
 
 
@@ -126,11 +144,25 @@ def check_for_update(timeout: int = 5) -> Optional[UpdateInfo]:
                 break
         if not asset_url:
             return None
+        body = data.get("body", "") or ""
+
+        # Tam kurulum: dosya VE gecerli ozet birlikte olmali.
+        setup_url = None
+        for a in data.get("assets", []):
+            if a.get("name") == SETUP_ASSET_NAME:
+                setup_url = a.get("browser_download_url")
+                break
+        setup_sha = _parse_setup_sha256(body)
+        if not (setup_url and setup_sha):
+            setup_url = setup_sha = None
+
         return UpdateInfo(
             version=remote_v,
-            notes=data.get("body", "") or "",
+            notes=body,
             asset_url=asset_url,
-            sha256=_parse_sha256(data.get("body", "")),
+            sha256=_parse_sha256(body),
+            setup_url=setup_url,
+            setup_sha256=setup_sha,
         )
     except Exception:
         return None
@@ -299,6 +331,9 @@ def run_update_flow(info: "UpdateInfo", parent_window=None) -> bool:
     """
     from tkinter import messagebox
 
+    if decide_update_kind(info) == "setup":
+        return _run_setup_flow(info, parent_window)
+
     tmp_zip = os.path.join(tempfile.gettempdir(), "PDF-Renamer_update.zip")
     if not download_update(info, tmp_zip):
         messagebox.showerror(
@@ -330,3 +365,117 @@ def run_update_flow(info: "UpdateInfo", parent_window=None) -> bool:
     )
     restart_app()
     return True  # ulasilmaz
+
+
+# ---------------------------------------------------------------------------
+# Tam kurulum (setup.exe) ile guncelleme
+#
+# src.zip yalnizca exe'nin yanindaki .py dosyalarini degistirir. Exe'nin
+# kendisi -- ve icine gomulu lisans kapisi -- ancak kurulum dosyasiyla
+# yenilenir. Indirilen sey CALISTIRILABILIR oldugu icin kural daha kati:
+# SHA256 zorunludur, tutmazsa dosya diskte birakilmaz ve hicbir sey calismaz.
+# ---------------------------------------------------------------------------
+
+def decide_update_kind(info: "UpdateInfo") -> str:
+    """'setup' = tam kurulum, 'code' = yalnizca src.zip (saf - test edilir)."""
+    if info.setup_url and info.setup_sha256:
+        return "setup"
+    return "code"
+
+
+def update_prompt(info: "UpdateInfo") -> str:
+    """Kullaniciya gosterilecek onay metni (saf - test edilir)."""
+    parts = ["New version: " + info.version]
+    if info.notes.strip():
+        parts.append(info.notes.strip())
+    if decide_update_kind(info) == "setup":
+        parts.append("This is a full install: the app will close and the "
+                     "installer will run. It may take a few minutes.")
+    else:
+        parts.append("The app will restart after the update.")
+    return "\n\n".join(parts)
+
+
+def download_setup(info: "UpdateInfo", dest_path: str, timeout: int = 300) -> bool:
+    """Kurulum dosyasini indirir ve SHA256'yi dogrular.
+
+    Ozet yoksa indirme DENENMEZ bile. Tutmazsa dosya silinir ve False doner;
+    yarim ya da degistirilmis bir kurulumcu diskte kalmaz.
+    """
+    if not info.setup_url or not info.setup_sha256:
+        return False
+    try:
+        _http_download(info.setup_url, dest_path, timeout=timeout)
+    except Exception:
+        _safe_remove(dest_path)
+        return False
+    try:
+        actual = _sha256_file(dest_path)
+    except OSError:
+        _safe_remove(dest_path)
+        return False
+    if actual.lower() != info.setup_sha256.lower():
+        _safe_remove(dest_path)
+        return False
+    return True
+
+
+def build_install_command(setup_path: str) -> list:
+    """Kurulumcuyu birkac saniye geciktirerek baslatan komut (saf - test edilir).
+
+    Calisan surec tkinter icin tcl/tk DLL'lerini yuklu tutuyor. Hemen
+    baslatilan Inno Setup, DLL henuz serbest kalmadigi icin "DeleteFile
+    failed; code 5" veriyor (EDMS_RIA_Print'te gercek kurulumda goruldu).
+    Kisa gecikme bu yarisi bitirir.
+
+    `timeout` degil `ping`: konsolsuz (pythonw) sureclerde `timeout`
+    "Input redirection is not supported" deyip hemen cikiyor.
+    """
+    delayed = ('ping 127.0.0.1 -n 3 >nul & "' + setup_path
+               + '" /VERYSILENT /NORESTART')
+    return ["cmd", "/c", delayed]
+
+
+def install_setup(setup_path: str):
+    """Kurulumu baslatir ve programdan hemen cikar.
+
+    Calisan program kendi exe'sini degistiremez, once cikmak sart.
+    os._exit(): Tcl/Tk kapanis temizligi gecikebiliyor; bu, sureci ve DLL
+    kilitlerini aninda birakir.
+    """
+    kwargs = {"close_fds": True}
+    if hasattr(subprocess, "CREATE_NO_WINDOW"):
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    subprocess.Popen(build_install_command(setup_path), **kwargs)
+    os._exit(0)
+
+
+def _run_setup_flow(info: "UpdateInfo", parent_window=None) -> bool:
+    """Indir, dogrula, kurulumcuyu baslat, cik. Basarida DONMEZ.
+
+    Indirme ya da ozet dogrulamasi tutmazsa hicbir sey calistirilmaz ve
+    False doner; mevcut kurulum oldugu gibi kalir.
+    """
+    from tkinter import messagebox
+
+    dest = os.path.join(tempfile.gettempdir(), SETUP_ASSET_NAME)
+    if not download_setup(info, dest):
+        _safe_remove(dest)
+        messagebox.showerror(
+            "Update failed",
+            "The installer could not be downloaded or verified.\n\n"
+            "Nothing was changed. Check your internet connection "
+            "and try again.",
+            parent=parent_window,
+        )
+        return False
+
+    messagebox.showinfo(
+        "Installing update",
+        "Version " + info.version + " will now be installed.\n\n"
+        "The app closes and the installer runs in the background; "
+        "it reopens when finished.",
+        parent=parent_window,
+    )
+    install_setup(dest)   # geri donmez
+    return True

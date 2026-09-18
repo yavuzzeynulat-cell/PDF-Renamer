@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import json
 import os
+import shutil
 import uuid
 
 LOG_NAME = "_rename_log.jsonl"
@@ -189,3 +190,58 @@ def undo_last(folder: str) -> list[RenameOutcome]:
     _write_log(path, records)
 
     return outcomes
+
+
+# ---------------------------------------------------------------------------
+# Kumeleme icin guvenli kopyalama.
+#
+# Yeniden adlandirmadan farki: kaynak dosya YERINDE kalir, hedef klasore bir
+# KOPYA birakilir ve dosya adi hic degismez (dosyalar zaten dokuman numarasi
+# ile adlandirilmis oluyor). Cakisma cozumu yeniden adlandirmayla ayni
+# `resolve_conflict` uzerinden yurur, boylece hedefteki hicbir dosyanin
+# uzerine yazilmaz.
+# ---------------------------------------------------------------------------
+
+@dataclass
+class CopyOutcome:
+    src: str                 # kaynak tam yol
+    dest: str | None         # olusan (veya dry_run'da olusacak) tam yol
+    status: str              # 'copied' | 'error'
+    message: str
+
+
+def safe_copy(src_path: str, dest_folder: str, *,
+              dry_run: bool = False) -> CopyOutcome:
+    """`src_path` dosyasini `dest_folder` icine ADI DEGISMEDEN kopyalar.
+
+    - Hedef klasor yoksa olusturulur (dry_run'da olusturulmaz).
+    - Hedefte ayni adli bir dosya varsa uzerine YAZILMAZ; ' (1)', ' (2)'...
+      eklenerek yeni bir ad bulunur.
+    - dry_run diske hic dokunmaz, yalnizca kullanilacak yolu bildirir.
+    - Her OS hatasi 'error' olarak dondurulur, asla firlatilmaz.
+    """
+    basename = os.path.basename(src_path)
+
+    if not os.path.isfile(src_path):
+        return CopyOutcome(src_path, None, "error",
+                           f"Source '{basename}' not found.")
+
+    if dry_run:
+        # Klasor henuz yoksa resolve_conflict bos dizin gibi davranir.
+        target = resolve_conflict(dest_folder, basename)
+        return CopyOutcome(src_path, os.path.join(dest_folder, target),
+                           "copied", f"Would copy to '{target}'.")
+
+    try:
+        os.makedirs(dest_folder, exist_ok=True)
+        target = resolve_conflict(dest_folder, basename)
+        dst = os.path.join(dest_folder, target)
+        # resolve_conflict ile kopyalama arasindaki yarisa karsi.
+        if os.path.exists(dst):
+            target = resolve_conflict(dest_folder, basename)
+            dst = os.path.join(dest_folder, target)
+        shutil.copy2(src_path, dst)
+    except OSError as exc:
+        return CopyOutcome(src_path, None, "error", str(exc))
+
+    return CopyOutcome(src_path, dst, "copied", f"Copied to '{target}'.")

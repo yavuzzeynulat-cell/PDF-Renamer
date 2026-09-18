@@ -1,4 +1,4 @@
-# PDF Otomatik İsimlendirici V2.1
+# PDF Otomatik İsimlendirici V2.2
 
 PDF'lerin içindeki doküman kodunu (varsayılan: `26437-LAB-...`) okuyup dosyayı
 otomatik olarak `<kod>.pdf` şeklinde yeniden adlandıran araç.
@@ -40,6 +40,38 @@ otomatik olarak `<kod>.pdf` şeklinde yeniden adlandıran araç.
 | 🔎 **Filtre + arama** | `All / Renamed / Already OK / Not found / Error` düğmeleri (canlı sayaçlı) ve anlık arama kutusu. |
 | 📤 **Export** | Görünen satırları CSV olarak kaydeder (UTF-8 BOM + `;` — Excel'de çift tıkla düzgün açılır). |
 
+### v2.2 ile gelenler
+
+| Özellik | Açıklama |
+|---------|----------|
+| 🗂️ **Kümeleme (Cluster)** | Ana penceredeki **Cluster** düğmesi ayrı bir pencere açar. Yazdığın *küme adlarını* PDF'lerin içinde arar ve her dosyayı, içinde geçen **her** küme adının klasörüne **kopyalar**. |
+
+**Kümeleme neyi yapar, neyi yapmaz**
+
+- Dosya **adına dokunmaz** — dosyalar bu aşamaya gelmeden önce zaten
+  `26437-LAB-...pdf` diye adlandırılmış oluyor.
+- **Orijinaller yerinden oynamaz**, sadece kopya oluşur. Bu yüzden Geri Al yok;
+  kaynak hiç değişmiyor.
+- Küme klasörleri, seçtiğin **hedef klasörün** içinde açılır — kaynak klasör
+  kirlenmez.
+- Hiçbir küme adı geçmeyen dosya kopyalanmaz, tabloda *No match* görünür.
+- Aynı işi ikinci kez çalıştırırsan koşulsuz tekrar kopyalar; hedefteki dosyanın
+  üzerine **yazmaz**, ` (1)` ekleyerek yanına koyar.
+- **Preview** diske hiç dokunmadan ne olacağını gösterir.
+
+**Eşleştirme kipi OCR düğmesine bağlıdır** (pencerede hangi kipte olduğun yazar):
+
+| OCR | Eşleştirme |
+|-----|------------|
+| Kapalı | Birebir — boşluklar ve büyük/küçük harf yazdığın gibi olmalı |
+| Açık | Boşluk ve harf duyarsız: `B0051 Bridge` = `B0051Bridge` = `B0051BRIDGE` |
+
+Gerekçesi: taranmış belgelerde OCR boşlukları yiyor. Gerçek bir örnekte
+`CORRIDOR 8 AND CORRIDOR 10D` metni `CORRIDOR8ANDCORRIDOR1OD` olarak çıkıyor.
+Birebir eşleştirme bu belgelerde hiçbir şey bulamazdı. Metin katmanı olan
+PDF'lerde ise boşluklar güvenilir olduğu için gevşetmeye gerek yok.
+Bulanık/kısmi eşleşme hiçbir kipte yoktur.
+
 ---
 
 ## Kurulum
@@ -71,6 +103,9 @@ renamer.py       # Güvenli yeniden adlandırma + log + geri-alma
 core.py          # Orkestrasyon: klasör (process_folder) + dosya listesi (process_files)
 gui.py           # Tkinter pencereli arayüz
 dnd.py           # Windows sürükle-bırak kancası (WM_DROPFILES, ek paket yok)
+grouper.py       # Kümeleme: metinde küme adlarını bulma (saf mantık)
+cluster.py       # Kümeleme orkestrasyonu: bul + hedef klasörlere kopyala
+cluster_gui.py   # Kümeleme penceresi (ayrı pencere, ana akışa karışmaz)
 updater.py       # GitHub release'lerinden otomatik güncelleme
 launcher.py      # EXE giriş noktası: uygulamayı src/ klasöründen yükler
 cli.py           # Konsol sürümü (eski tarz)
@@ -79,15 +114,48 @@ v1_original.py   # Orijinal V1.0 kodu (yedek)
 tests/           # Birim + entegrasyon testleri ve örnek PDF'ler
 ```
 
+## Lisans kapısı
+
+Program açılışında `LisansPaneli` sunucusuna sorar; izin yoksa açılmaz.
+Kapı `launcher.py` içindedir — kullanıcının çift tıkladığı tek yer orası, ve
+`src/` yüklenmeden önce çalışır.
+
+`license_client.py` bilerek `src/` **dışındadır**: `launcher.py` onu import
+ettiği için EXE'ye gömülür. `src/` dosyaları exe'nin yanında düz metin durur,
+`SECRET` oraya konsaydı Not Defteri ile okunabilirdi. Ayrıca kapının kendisi,
+kapının denetlediği güncelleme kanalıyla değişmemeli.
+
+**Kurulum tamamlanmadan kapı devreye girmez.** `SECRET` yer tutucu olduğu
+sürece `require()` sessizce döner ve program normal açılır. Gerçek `SECRET`
+yapıştırıldığı an kapı çalışmaya başlar.
+
+Açmak için:
+
+1. Panele gir → **Add a program** → `PROGRAM_ID` ve `SECRET` al
+2. `license_client.py` içindeki `SECRET` satırını doldur
+   (`PROGRAM_ID` şu an `pdf_renamer` — panel farklı verirse onu da düzelt)
+3. `python -m pytest tests	est_license_gate.py tests	est_license_client.py -q`
+4. Programı çalıştır → panelde cihaz **Pending** görünür → **+30d** ver
+
+Bu makinenin kodu: `9A71-7EB9-E3A1-6748`
+
+> **Dikkat — iki güncelleme sistemi.** Bu program kendi `updater.py`'ı ile
+> GitHub release'lerinden güncelleniyor. `license_client` de panel üzerinden
+> güncelleme teklif edebiliyor. Panelde R2 henüz açık olmadığı için şu an
+> çakışma yok; R2 açılırsa birinden vazgeçilmeli, yoksa kullanıcıya bir
+> açılışta iki güncelleme sorulur.
+
 ## Testler
 
 ```powershell
 python -m pytest tests\ -v
 ```
 
-67 test: birim (extractor, code_finder, renamer, sürükle-bırak kancası) +
-uçtan uca entegrasyon (eski davranışın korunması, çok sayfa, çakışma,
-önizleme, geri-alma, dosyaların yerinde işlenmesi).
+110 test: birim (extractor, code_finder, renamer, grouper, sürükle-bırak
+kancası) + uçtan uca entegrasyon (eski davranışın korunması, çok sayfa,
+çakışma, önizleme, geri-alma, dosyaların yerinde işlenmesi, kümeleme) +
+paketleme koruması (yeni bir modül src/ listelerinden birine eklenmeyi
+unutursa test kırılır).
 
 ---
 

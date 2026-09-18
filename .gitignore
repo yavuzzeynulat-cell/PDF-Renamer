@@ -10,3 +10,7 @@ update_error.log
 launcher_crash.log
 _shot*.png
 *.zip
+
+# Lisans anahtari - depo public, ASLA commitlenmez
+license_secret.txt
+*LISANS-ANAHTARI*

@@ -8,7 +8,8 @@ PyInstaller bunu PDF-Renamer.exe olarak derler. Gorevi:
      yukleyip BIR kez yeniden dener.
 
 src/ icindeki kod dosyalari (main, gui, core, extractor, code_finder, renamer,
-config, theme, cli, updater, dnd, version.txt) pakete GOMULMEZ; exe'nin yaninda durur
+config, theme, cli, updater, dnd, grouper, cluster, cluster_gui,
+version.txt) pakete GOMULMEZ; exe'nin yaninda durur
 ve updater.apply_update() ile guncellenir. Agir bagimliliklar (onnxruntime,
 rapidocr, pdfplumber, fitz...) exe'de gomulu kalir.
 """
@@ -40,10 +41,27 @@ import shutil
 import sys
 import traceback
 
+import license_client
+
 # src/ guncellenince yeniden yuklenmesi gereken uygulama modulleri.
 _APP_MODULES = ("main", "gui", "core", "extractor", "code_finder",
-                "renamer", "config", "theme", "cli", "updater", "dnd")
+                "renamer", "config", "theme", "cli", "updater", "dnd",
+                "grouper", "cluster", "cluster_gui")
 
+
+def _local_version() -> str:
+    """version.txt'i okur: once src/, yoksa uygulama klasoru."""
+    app = _app_dir()
+    for folder in (os.path.join(app, "src"), app):
+        try:
+            with open(os.path.join(folder, "version.txt"),
+                      encoding="utf-8") as fh:
+                value = fh.read().strip()
+        except OSError:
+            continue
+        if value:
+            return value
+    return ""
 
 def _app_dir() -> str:
     if getattr(sys, "frozen", False):
@@ -96,6 +114,12 @@ def _rollback() -> bool:
 
 
 def main() -> None:
+    # Lisans kapisi. Kullanicinin actigi tek yer burasi, bu yuzden kapi
+    # da burada: src/ yuklenmeden once calisir ve bir acilista bir kez
+    # sorulur. Izin yoksa require() pencereyi gosterip SystemExit atar;
+    # asagidaki 'except SystemExit: raise' sayesinde bu bir COKME olarak
+    # gorulmez, yani bosuna src_backup'a geri donulmez.
+    license_client.require(version=_local_version())
     try:
         _run_src()
         return

@@ -30,8 +30,25 @@ import zipfile
 SRC_FILES = [
     "main.py", "gui.py", "core.py", "extractor.py", "code_finder.py",
     "renamer.py", "config.py", "theme.py", "cli.py", "updater.py", "dnd.py",
+    "grouper.py", "cluster.py", "cluster_gui.py",
     "version.txt",
 ]
+
+
+def build_notes(zip_sha: str, setup_sha, extra: str) -> str:
+    """Release notlarini kurar (saf - test edilir).
+
+    Istemci iki ayri satir okuyor: src.zip icin 'SHA256:', tam kurulum icin
+    'SETUP_SHA256:'. updater ikisini karistirmayacak sekilde ayristirir.
+    """
+    lines = []
+    if extra:
+        lines.append(extra)
+        lines.append("")
+    lines.append("SHA256: " + zip_sha)
+    if setup_sha:
+        lines.append("SETUP_SHA256: " + setup_sha)
+    return "\n".join(lines)
 
 
 def _run(cmd, cwd):
@@ -41,12 +58,18 @@ def _run(cmd, cwd):
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print("Kullanim: python publish_update.py <surum> [degisiklik-notu]")
+        print("Kullanim: python publish_update.py <surum> [degisiklik-notu] "
+              "[--setup <kurulum.exe>]")
         print('Ornek   : python publish_update.py 2.0.1 "Tarama hizi duzeltildi"')
         return 1
 
     version = sys.argv[1].lstrip("v").strip()
-    notes_extra = sys.argv[2].strip() if len(sys.argv) > 2 else ""
+    # --setup ve yolu bir "degisiklik notu" sanilmamali.
+    extras = [a for a in sys.argv[2:] if a != "--setup"]
+    if "--setup" in sys.argv:
+        target = sys.argv[sys.argv.index("--setup") + 1]
+        extras = [a for a in extras if a != target]
+    notes_extra = extras[0].strip() if extras else ""
     root = os.path.dirname(os.path.abspath(__file__))
 
     # 1) version.txt
@@ -74,12 +97,36 @@ def main() -> int:
     print(f"SHA256: {sha}")
 
     # 4) GitHub release
-    body = (notes_extra + "\n\n" if notes_extra else "") + f"SHA256: {sha}"
+    # 4a) Tam kurulum dosyasi (istege bagli): --setup <yol>
+    setup_path = None
+    setup_sha = None
+    if "--setup" in sys.argv:
+        setup_path = sys.argv[sys.argv.index("--setup") + 1]
+        if not os.path.isfile(setup_path):
+            print(f"[HATA] Kurulum dosyasi yok: {setup_path}")
+            return 1
+        hs = hashlib.sha256()
+        with open(setup_path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                hs.update(chunk)
+        setup_sha = hs.hexdigest()
+        print(f"setup: {os.path.basename(setup_path)}  SHA256: {setup_sha}")
+
+    body = build_notes(sha, setup_sha, notes_extra)
     tag = "v" + version
     # Ayni tag varsa once temizle (yeniden yayinlamak icin).
     _run(["gh", "release", "delete", tag, "--yes", "--cleanup-tag"], root)
-    r = _run(["gh", "release", "create", tag, zip_path,
-              "--title", tag, "--notes", body], root)
+    upload = [zip_path]
+    if setup_path:
+        # Varlik adi updater.SETUP_ASSET_NAME ile BIREBIR ayni olmali,
+        # yoksa istemci kurulum dosyasini goremez.
+        staged = os.path.join(tempfile.gettempdir(), "PDF-Renamer-Setup.exe")
+        if os.path.abspath(staged) != os.path.abspath(setup_path):
+            import shutil as _sh
+            _sh.copy2(setup_path, staged)
+        upload.append(staged)
+    r = _run(["gh", "release", "create", tag] + upload
+             + ["--title", tag, "--notes", body], root)
     if r.returncode != 0:
         print("[HATA] GitHub release olusturulamadi (gh giris yapilmis mi?).")
         return r.returncode

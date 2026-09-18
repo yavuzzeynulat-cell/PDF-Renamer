@@ -5,6 +5,13 @@
 from PyInstaller.utils.hooks import collect_all
 
 datas = []
+# Lisans anahtari: depoda yok, derleme aninda EXE'ye gomulur.
+# Yoksa derleme surer ama uretilen EXE'de lisans kapisi KAPALI olur.
+import os as _os
+if _os.path.exists('license_secret.txt'):
+    datas += [('license_secret.txt', '.')]
+else:
+    print('[UYARI] license_secret.txt yok - EXE lisans kapisi OLMADAN derlenecek.')
 binaries = []
 hiddenimports = []
 for _pkg in ('pdfplumber', 'pypdfium2', 'pdfminer', 'fitz',

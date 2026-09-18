@@ -4,7 +4,7 @@ This file is owned by the coordinator. It now supports a user-friendly
 `prefix` (the changeable "26437-LAB-" part) and a `suffix` (text appended
 directly after the found document number, with no automatic space).
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import re
 
 # Original V1 default prefix.
@@ -44,6 +44,14 @@ class Settings:
     ocr_lang: str = DEFAULT_OCR_LANG    # OCR language(s)
     recursive: bool = False             # Also scan subfolders
     dry_run: bool = False               # Preview only: don't modify files
+
+    # -- Kumeleme (ayri is: yeniden adlandirmayla ilgisi yoktur) --------
+    # Kullanicinin yazdigi kume adlari. Bir PDF'in metninde bunlardan
+    # hangileri geciyorsa, dosya o adli klasorlere KOPYALANIR; dosya adi
+    # degismez ve orijinal yerinde kalir.
+    phrases: list = field(default_factory=list)
+    # Kume klasorlerinin acilacagi ust klasor.
+    target_folder: str = ""
 
     def effective_folder(self) -> str:
         import os
