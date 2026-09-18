@@ -26,7 +26,8 @@ from PIL import ImageTk
 
 import theme
 from config import Settings, DEFAULT_PREFIX
-import cluster_gui
+import cluster_tab
+import guide_tab
 import core
 import dnd
 import updater
@@ -91,9 +92,14 @@ def _save_prefs(prefs: dict) -> None:
 class App:
     def __init__(self, root: tk.Tk):
         self.root = root
-        root.title("PDF Renamer")
+        root.title("PDF Clerk")
         root.geometry(f"{W}x{H}")
-        root.resizable(False, False)
+        # Tasarim olculeri en KUCUK boyut; buyutulebilir, tam ekran yapilabilir.
+        root.minsize(W, H)
+        root.resizable(True, True)
+        self._lw, self._lh = W, H      # son uygulanan yerlesim olculeri
+        self._resize_job = None
+        self._img_rules = []           # (item_id, w,h -> PIL) yeniden ciziciler
         self._imgrefs = []
         self._ui_queue: "queue.Queue[tuple]" = queue.Queue()
         self._running = False
@@ -126,14 +132,37 @@ class App:
         self.tog_on = self._mk(theme.toggle_image(True))
         self.tog_off = self._mk(theme.toggle_image(False))
 
+        self.H = H
+
         self._style()
-        self._draw_static()
+        # Once her sekmede gorunen cerceve (arka plan, baslik, sekme seridi,
+        # alt satir). Sonra her sekmenin kendi ogeleri; hangi ogenin hangi
+        # sekmeye ait oldugunu canvas'tan fark alarak buluyoruz, boylece
+        # mevcut kurulum metodlarina dokunmaya gerek kalmiyor.
+        self._draw_chrome()
+        shared = set(self.canvas.find_all())
+
+        self._draw_rename_static()
         self._build_inputs()
         self._build_options()
         self._build_buttons()
         self._build_results()
         self._update_example()
+        self._tab_items = {"rename": set(self.canvas.find_all()) - shared}
+
+        self.cluster = cluster_tab.ClusterTab(self)
+        self._tab_items["cluster"] = (set(self.canvas.find_all())
+                                      - shared - self._tab_items["rename"])
+
+        guide_tab.GuideTab(self)
+        self._tab_items["guide"] = (set(self.canvas.find_all()) - shared
+                                    - self._tab_items["rename"]
+                                    - self._tab_items["cluster"])
+
+        self._before_guide = "rename"
+        self.show_tab("rename")
         self._build_menu()
+        self.root.bind("<Configure>", self._on_configure)
         _apply_window_effects(root)
         # Surukle-birak: kurulamazsa "Add PDFs" dugmesi ayni isi gorur.
         self._dnd = dnd.install(root)
@@ -141,6 +170,63 @@ class App:
         # Acilista sessiz guncelleme kontrolu (cevrimdisi ise hicbir sey olmaz).
         threading.Thread(target=self._check_update_worker, args=(False,),
                          daemon=True).start()
+
+    # -- yeniden akis -------------------------------------------------------
+    def _tag(self, item, *rules):
+        """Bir ogeye yerlesim kurallarini takar ve ogeyi geri dondurur."""
+        for rule in rules:
+            self.canvas.addtag_withtag(rule, item)
+        return item
+
+    def _img_rule(self, item, build):
+        """Genislikle birlikte yeniden cizilmesi gereken gorsel."""
+        self._img_rules.append((item, build))
+        return item
+
+    def _on_configure(self, event):
+        if event.widget is not self.root:
+            return
+        # Suruklerken her pikselde yeniden dizmeyelim; durulunca bir kez.
+        if self._resize_job is not None:
+            self.root.after_cancel(self._resize_job)
+        self._resize_job = self.root.after(
+            90, lambda: self._relayout(self.root.winfo_width(),
+                                       self.root.winfo_height()))
+
+    def _relayout(self, w, h):
+        self._resize_job = None
+        dx, dy = w - self._lw, h - self._lh
+        if dx == 0 and dy == 0:
+            return
+        self._lw, self._lh = w, h
+        c = self.canvas
+        c.configure(width=w, height=h)
+
+        # arka plan: tek seferlik gorseli gerdiriyoruz (yeniden uretmek yavas)
+        self._bg_img = self._mk(self._bg_src.resize((w, h)))
+        c.itemconfig(self._bg_id, image=self._bg_img)
+
+        if dx:
+            c.move("ar", dx, 0)
+            c.move("acx", dx / 2.0, 0)
+            for item in c.find_withtag("sw"):
+                c.itemconfig(item, width=int(float(c.itemcget(item, "width"))) + dx)
+            for item in c.find_withtag("lw"):
+                x1, y1, x2, y2 = c.coords(item)
+                c.coords(item, x1, y1, x2 + dx, y2)
+        if dy:
+            c.move("ab", 0, dy)
+            for item in c.find_withtag("sh"):
+                c.itemconfig(item, height=int(float(c.itemcget(item, "height"))) + dy)
+
+        # genisleyen gorseller (ornek serit gibi) yeniden cizilir
+        for item, build in self._img_rules:
+            img = self._mk(build(w - 2 * self.cl, h))
+            c.itemconfig(item, image=img)
+
+        self.cr = w - self.cl
+        self.fullw = self.cr - self.cl
+        self.H = h
 
     # -- helpers ------------------------------------------------------------
     def _mk(self, pil):
@@ -170,27 +256,112 @@ class App:
                      background=theme.ACCENT_HEX, borderwidth=0, thickness=8)
 
     # -- static art ---------------------------------------------------------
-    def _draw_static(self):
+    def _draw_chrome(self):
+        """Her sekmede gorunen cerceve: arka plan, baslik, sekmeler, alt satir."""
         # Tek temiz yuzey: icerik dogrudan arka plan uzerinde (ic ice cerceve yok).
-        self.canvas.create_image(0, 0, image=self._mk(theme.make_background(W, H)),
-                                 anchor="nw")
+        self._bg_src = theme.make_background(W, H)
+        self._bg_img = self._mk(self._bg_src)
+        self._bg_id = self.canvas.create_image(0, 0, image=self._bg_img,
+                                               anchor="nw")
 
-        self._text(self.cl, 32, "PDF Renamer", theme.tkfont(21, "semibold"))
-        self._text(self.cl, 64, "Read the document number  →  rename the file automatically",
-                   theme.tkfont(10), theme.SLATE)
+        self._text(self.cl, 22, "PDF Clerk", theme.tkfont(21, "semibold"))
         badge = theme.pill("v" + updater.current_version(),
                            theme.font(theme.SEGOE_SB, 10),
                            (255, 255, 255, 255), theme.ACCENT + (235,))
-        self.canvas.create_image(self.cr, 30, image=self._mk(badge), anchor="ne")
-        # Guncelleme linki (rozetin altinda, sag ust)
-        self.upd_id = self._text(self.cr, 60, "Check for updates",
-                                 theme.tkfont(9, "bold"), theme.ACCENT_HEX,
-                                 anchor="ne")
+        self._tag(self.canvas.create_image(self.cr, 26, image=self._mk(badge),
+                                           anchor="ne"), "ar")
+        self.upd_id = self._tag(
+            self._text(self.cr, 64, "Check for updates",
+                       theme.tkfont(9, "bold"), theme.ACCENT_HEX,
+                       anchor="ne"), "ar")
         self.canvas.tag_bind(self.upd_id, "<Button-1>",
                              lambda e: self.on_check_update())
         self._cursor(self.upd_id)
-        self.canvas.create_line(self.cl, 88, self.cr, 88, fill="#CFE0F2")
 
+        # Sekme seridi basligin ikinci satiri olarak yasar: dikeyde yer
+        # calmaz, tarayici sekmesi taklidi yapmaz. Aktif olani ince bir
+        # aksan cubugu soyler -- mavi bu ekranda yalnizca burada, birincil
+        # eylemde ve canli degerde kullanilir.
+        self._tabs = {}
+        x = self.cl
+        for key, label in (("rename", "Rename"), ("cluster", "Cluster")):
+            tid = self._text(x, 60, label, theme.tkfont(14, "semibold"),
+                             theme.SLATE)
+            box = self.canvas.bbox(tid)
+            width = box[2] - box[0]
+            bar = self.canvas.create_rectangle(
+                x, 84, x + width, 88, fill=theme.ACCENT_HEX, outline="",
+                state="hidden")
+            for item in (tid, bar):
+                self.canvas.tag_bind(item, "<Button-1>",
+                                     lambda e, k=key: self.show_tab(k))
+            self._cursor(tid)
+            self._tabs[key] = (tid, bar)
+            x += width + 40
+
+        # Seridin sagi bostu; aktif sekmenin ne yaptigini oraya yaziyoruz.
+        # Sekme hem buyudu hem de artik kendini anlatiyor, yer harcamadan.
+        self._tab_note = self._text(x + 12, 64, "", theme.tkfont(10),
+                                    theme.MUTED)
+
+        # Kilavuz ayri pencere degil: ayni pencerede acilan bir sayfa.
+        # Guncelleme baglantisinin SOLUNA, ayni satira koyuluyor; ust sagdaki
+        # surum rozetiyle cakismasin diye yeri bbox'tan hesaplaniyor.
+        edge = self.canvas.bbox(self.upd_id)[0] - 10
+        self._tag(self._text(edge, 64, "·", theme.tkfont(9, "bold"),
+                             theme.MUTED, anchor="ne"), "ar")
+        self.guide_id = self._tag(
+            self._text(edge - 12, 64, "How it works", theme.tkfont(9, "bold"),
+                       theme.ACCENT_HEX, anchor="ne"), "ar")
+        self.canvas.tag_bind(self.guide_id, "<Button-1>",
+                             lambda e: self.toggle_guide())
+        self._cursor(self.guide_id)
+
+        self._tag(self.canvas.create_line(self.cl, 88, self.cr, 88,
+                                          fill="#CFE0F2"), "lw")
+
+        # Pencerenin en altinda kalici yazar bilgisi ve durum satiri.
+        self._tag(self.canvas.create_line(self.cl, H - 40, self.cr, H - 40,
+                                          fill="#DCE7F3"), "ab", "lw")
+        self._tag(self._text(W // 2, H - 24, CREDIT, theme.tkfont(9),
+                             theme.SLATE, anchor="center"), "ab", "acx")
+        self._status_id = self._tag(
+            self._text(self.cl, H - 24, "Ready.", theme.tkfont(9),
+                       theme.SLATE, anchor="w"), "ab")
+
+    TAB_NOTES = {
+        "rename": "Reads the document number inside each PDF and renames the "
+                  "file where it sits.",
+        "cluster": "Finds the names you file by and moves each PDF into the "
+                   "folders that mention it.",
+        "guide": "How the two tabs work.",
+    }
+
+    def show_tab(self, key: str) -> None:
+        """Sekmeyi degistirir: ogeleri gizler/gosterir, seridi gunceller."""
+        self._tab = key
+        for name, (tid, bar) in self._tabs.items():
+            active = name == key
+            self.canvas.itemconfig(tid, fill=theme.INK if active else theme.SLATE)
+            self.canvas.itemconfig(bar, state="normal" if active else "hidden")
+        for name, items in self._tab_items.items():
+            state = "normal" if name == key else "hidden"
+            for item in items:
+                self.canvas.itemconfig(item, state=state)
+        self.canvas.itemconfig(self._tab_note, text=self.TAB_NOTES.get(key, ""))
+        self.canvas.itemconfig(
+            self.guide_id, text="Back" if key == "guide" else "How it works")
+
+    def toggle_guide(self) -> None:
+        """Kilavuzu acar; acikken tiklanirsa geldigi sekmeye doner."""
+        if self._tab == "guide":
+            self.show_tab(self._before_guide)
+        else:
+            self._before_guide = self._tab
+            self.show_tab("guide")
+
+    def _draw_rename_static(self):
+        """Yalnizca Rename sekmesinde gorunen sabit yazilar."""
         self._text(self.cl, 100, "FOLDER", theme.tkfont(9, "bold"), theme.SLATE)
         self._text(self.cl, 166, "DOCUMENT CODE PREFIX  (editable)",
                    theme.tkfont(9, "bold"), theme.SLATE)
@@ -201,23 +372,25 @@ class App:
         self.ex_y = 230
         box_h = 42
         cy = self.ex_y + box_h // 2
-        box = theme.rounded_rect((self.fullw, box_h), 12,
-                                 (theme.ACCENT[0], theme.ACCENT[1], theme.ACCENT[2], 22),
-                                 theme.ACCENT + (90,), 1)
-        self.canvas.create_image(self.cl, self.ex_y, image=self._mk(box), anchor="nw")
+        def _box(width, _h):
+            return theme.rounded_rect(
+                (width, box_h), 12,
+                (theme.ACCENT[0], theme.ACCENT[1], theme.ACCENT[2], 22),
+                theme.ACCENT + (90,), 1)
+
+        box_id = self.canvas.create_image(self.cl, self.ex_y,
+                                          image=self._mk(_box(self.fullw, 0)),
+                                          anchor="nw")
+        self._img_rule(box_id, _box)
         self._text(self.cl + 16, cy, "EXAMPLE OUTPUT",
                    theme.tkfont(8, "bold"), theme.ACCENT_HEX, anchor="w")
         # Dosya adi seritte hem dikey hem yatay ORTALI.
-        self.ex_id = self._text(self.cl + self.fullw // 2, cy, "",
-                                theme.tkfont(13, "semibold"), theme.INK,
-                                anchor="center")
+        self.ex_id = self._tag(
+            self._text(self.cl + self.fullw // 2, cy, "",
+                       theme.tkfont(13, "semibold"), theme.INK,
+                       anchor="center"), "acx")
 
         self._text(self.cl, 284, "OPTIONS", theme.tkfont(9, "bold"), theme.SLATE)
-
-        # Pencerenin en altinda kalici yazar bilgisi (acilistaki splash'a ek).
-        self.canvas.create_line(self.cl, H - 40, self.cr, H - 40, fill="#DCE7F3")
-        self._text(W // 2, H - 24, CREDIT, theme.tkfont(9), theme.SLATE,
-                   anchor="center")
 
     # -- inputs -------------------------------------------------------------
     def _build_inputs(self):
@@ -231,10 +404,11 @@ class App:
         start_folder = last if (last and os.path.isdir(last)) else os.getcwd()
         self.var_folder = tk.StringVar(value=start_folder)
         e1 = tk.Entry(self.root, textvariable=self.var_folder, **kw)
-        self.canvas.create_window(self.cl, 118, anchor="nw", window=e1,
-                                  width=self.fullw - 118, height=36)
-        bid = self.canvas.create_image(self.cr, 118, image=self._mk(
-            theme.button_image(108, 36, "Browse", "soft")), anchor="ne")
+        self._tag(self.canvas.create_window(self.cl, 118, anchor="nw", window=e1,
+                                            width=self.fullw - 118, height=36),
+                  "sw")
+        bid = self._tag(self.canvas.create_image(self.cr, 118, image=self._mk(
+            theme.button_image(108, 36, "Browse", "soft")), anchor="ne"), "ar")
         self.canvas.tag_bind(bid, "<Button-1>", lambda e: self.on_browse())
         self._cursor(bid)
 
@@ -247,8 +421,9 @@ class App:
         self.canvas.create_window(self.cl, 184, anchor="nw", window=e2,
                                   width=300, height=36)
         e3 = tk.Entry(self.root, textvariable=self.var_suffix, **kw)
-        self.canvas.create_window(366, 184, anchor="nw", window=e3,
-                                  width=self.cr - 366, height=36)
+        self._tag(self.canvas.create_window(366, 184, anchor="nw", window=e3,
+                                            width=self.cr - 366, height=36),
+                  "sw")
 
     # -- options (clickable toggles) ---------------------------------------
     def _build_options(self):
@@ -281,8 +456,7 @@ class App:
         specs = [("preview", "Preview", "ghost", 150, self.on_preview),
                  ("apply", "Apply", "accent", 150, self.on_apply),
                  ("undo", "Undo", "ghost", 130, self.on_undo),
-                 ("add", "+ Add PDFs", "ghost", 150, self.on_add_files),
-                 ("cluster", "Cluster", "soft", 150, self.on_cluster)]
+                 ("add", "+ Add PDFs", "ghost", 150, self.on_add_files)]
         x = self.cl
         for name, text, kind, w, cmd in specs:
             normal = self._mk(theme.button_image(w, 40, text, kind))
@@ -296,8 +470,9 @@ class App:
         # progress bar
         self.progress = ttk.Progressbar(self.root, style="Frost.Horizontal.TProgressbar",
                                         mode="determinate")
-        self.canvas.create_window(self.cl, 392, anchor="nw", window=self.progress,
-                                  width=self.fullw, height=8)
+        self._tag(self.canvas.create_window(self.cl, 392, anchor="nw",
+                                            window=self.progress,
+                                            width=self.fullw, height=8), "sw")
 
     def _cursor(self, item):
         self.canvas.tag_bind(item, "<Enter>",
@@ -310,8 +485,6 @@ class App:
         self._text(self.cl, 406, "RESULTS", theme.tkfont(9, "bold"), theme.SLATE)
         # Durum yazisi en altta, kunyenin solunda: arac cubugunu kalabaliklastirmaz.
         self.var_status = tk.StringVar(value="Ready.")
-        self._status_id = self._text(self.cl, H - 24, "Ready.", theme.tkfont(9),
-                                     theme.SLATE, anchor="w")
 
         # Birakma modu uyarisi ("N dosya birakildi ...") -- normalde gizli.
         self._drop_id = self._text(self.cl + 68, 406, "", theme.tkfont(9, "bold"),
@@ -338,8 +511,9 @@ class App:
         self.tree.configure(yscrollcommand=vsb.set)
         self.tree.pack(side="left", fill="both", expand=True)
         vsb.pack(side="right", fill="y")
-        self.canvas.create_window(self.cl, top, anchor="nw", window=frame,
-                                  width=self.fullw, height=H - top - 52)
+        self._tag(self.canvas.create_window(self.cl, top, anchor="nw",
+                                            window=frame, width=self.fullw,
+                                            height=H - top - 52), "sw", "sh")
 
         self.tree.tag_configure("ok", background="#DBF5E3")
         self.tree.tag_configure("warn", background="#FFEAD6")
@@ -369,19 +543,20 @@ class App:
             self._chip[key] = tid
             x += 112
 
-        self._text(640, y, "SEARCH", theme.tkfont(9, "bold"), theme.SLATE,
-                   anchor="w")
+        self._tag(self._text(640, y, "SEARCH", theme.tkfont(9, "bold"),
+                             theme.SLATE, anchor="w"), "ar")
         self.var_search = tk.StringVar(value="")
         self.var_search.trace_add("write", lambda *_: self._refresh_table())
         se = tk.Entry(self.root, textvariable=self.var_search, relief="flat",
                       bd=0, highlightthickness=2, highlightbackground="#C5D8EC",
                       highlightcolor=theme.ACCENT_HEX, font=theme.tkfont(10),
                       fg=theme.INK, bg="white", insertbackground=theme.ACCENT_HEX)
-        self.canvas.create_window(706, y - 14, anchor="nw", window=se,
-                                  width=204, height=28)
+        self._tag(self.canvas.create_window(706, y - 14, anchor="nw",
+                                            window=se, width=204, height=28),
+                  "ar")
 
-        eid = self.canvas.create_image(self.cr, y - 14, image=self._mk(
-            theme.button_image(110, 28, "Export", "soft")), anchor="ne")
+        eid = self._tag(self.canvas.create_image(self.cr, y - 14, image=self._mk(
+            theme.button_image(110, 28, "Export", "soft")), anchor="ne"), "ar")
         self.canvas.tag_bind(eid, "<Button-1>", lambda e: self.on_export())
         self._cursor(eid)
 
@@ -697,6 +872,9 @@ class App:
 
     # -- drag & drop / adding files ----------------------------------------
     def _on_dropped(self, paths):
+        # Birakilan dosyalar yeniden adlandirma isidir; kullanici
+        # Cluster sekmesindeyken birakirsa sonucu gormesi icin geciyoruz.
+        self.show_tab("rename")
         """Pencereye birakilan yollari kuyruga alip onizlemeyi baslatir."""
         if self._running:
             self._set_status("Busy - drop the files again when this run ends.")
@@ -712,13 +890,9 @@ class App:
         self._paint_drop_banner()
         self._run(dry_run=True)   # once onizleme; degisiklik Apply ile olur
 
-    def on_cluster(self):
-        """Kumeleme penceresini acar (yeniden adlandirmadan ayri bir is).
-
-        Tercihler sozlugu ve kaydetme fonksiyonu paylasilir; boylece kume
-        adlari ve hedef klasor ayni prefs.json dosyasinda yasar.
-        """
-        cluster_gui.open_window(self.root, self._prefs, _save_prefs)
+    def save_prefs(self):
+        """Tercihleri diske yazar. Kumeleme sekmesi de bunu kullanir."""
+        _save_prefs(self._prefs)
 
     def on_add_files(self):
         """Surukle-birak calismazsa (veya tercih edilmezse) ayni is."""
@@ -877,10 +1051,18 @@ class App:
                     f"You are on the latest version (v{updater.current_version()}).")
             self._set_status("Ready.")
             return
-        if messagebox.askyesno(
-                "New version available",
-                updater.update_prompt(info)):
+        required = updater.decide_update_kind(info) == "required"
+        title = "Update required" if required else "New version available"
+        if messagebox.askyesno(title, updater.update_prompt(info)):
             updater.run_update_flow(info, parent_window=self.root)
+        elif required:
+            # Bu kopya kapisiz kuruldu; guncellemeyi atlarsa izinsiz
+            # calismaya devam ederdi. Atlamaya izin vermiyoruz.
+            messagebox.showinfo(
+                "Update required",
+                "The app cannot continue without this update.",
+                parent=self.root)
+            self.root.destroy()
         else:
             self._set_status("Ready.")
 
@@ -939,7 +1121,7 @@ def _show_splash(root, on_done):
         pass
     cv = tk.Canvas(splash, width=sw, height=sh, highlightthickness=0, bd=0, bg=KEY)
     cv.pack(fill="both", expand=True)
-    img = ImageTk.PhotoImage(theme.splash_image(sw, sh, "PDF Renamer",
+    img = ImageTk.PhotoImage(theme.splash_image(sw, sh, "PDF Clerk",
                                                 "Produced by Yavuz Zeynula"))
     cv.create_image(0, 0, image=img, anchor="nw")
     cv.image = img  # keep ref

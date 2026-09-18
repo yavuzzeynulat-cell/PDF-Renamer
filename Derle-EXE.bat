@@ -29,7 +29,8 @@ copy /Y updater.py     "%SRCDIR%\" >nul
 copy /Y dnd.py         "%SRCDIR%\" >nul
 copy /Y grouper.py     "%SRCDIR%\" >nul
 copy /Y cluster.py     "%SRCDIR%\" >nul
-copy /Y cluster_gui.py "%SRCDIR%\" >nul
+copy /Y cluster_tab.py "%SRCDIR%\" >nul
+copy /Y guide_tab.py   "%SRCDIR%\" >nul
 copy /Y version.txt    "%SRCDIR%\" >nul
 
 echo.

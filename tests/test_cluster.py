@@ -62,9 +62,16 @@ def test_file_lands_in_the_folder_named_after_the_phrase(workspace):
     assert "26437-LAB-001.pdf" in _names(target / "B0051 Bridge")
 
 
-def test_the_original_file_never_moves(workspace):
+def test_copy_mode_leaves_the_original_where_it_was(workspace):
+    """Kopyalama kipinde (move_originals=False) kaynak hic degismez.
+
+    Varsayilan kip TASIMA; orada kaynagin bosalmasi beklenir ve bunu
+    test_cluster_move.py dogrular. Burada kopyalama kipinin hala calistigini
+    sabitliyoruz.
+    """
     src, target = workspace
-    cluster.cluster_folder(_settings(target, folder=str(src)))
+    cluster.cluster_folder(_settings(target, folder=str(src),
+                                     move_originals=False))
     assert _names(src) == {"26437-LAB-001.pdf", "26437-LAB-002.pdf",
                            "26437-LAB-003.pdf"}
 
@@ -127,10 +134,13 @@ def test_preview_reports_the_groups_per_file(workspace):
 
 # -- kullanicinin karari: kosulsuz kopyala, atlama yok -----------------------
 
-def test_running_twice_copies_again_instead_of_skipping(workspace):
+def test_copy_mode_run_twice_copies_again_instead_of_skipping(workspace):
+    """Kullanicinin karari: atlama yok. (Kopyalama kipinde gozlenebilir --
+    tasima kipinde ikinci calistirmada kaynakta dosya kalmaz.)"""
     src, target = workspace
-    cluster.cluster_folder(_settings(target, folder=str(src)))
-    cluster.cluster_folder(_settings(target, folder=str(src)))
+    opts = dict(folder=str(src), move_originals=False)
+    cluster.cluster_folder(_settings(target, **opts))
+    cluster.cluster_folder(_settings(target, **opts))
     assert _names(target / "B0051 Bridge") == {
         "26437-LAB-001.pdf", "26437-LAB-002.pdf",
         "26437-LAB-001 (1).pdf", "26437-LAB-002 (1).pdf",

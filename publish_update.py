@@ -30,7 +30,7 @@ import zipfile
 SRC_FILES = [
     "main.py", "gui.py", "core.py", "extractor.py", "code_finder.py",
     "renamer.py", "config.py", "theme.py", "cli.py", "updater.py", "dnd.py",
-    "grouper.py", "cluster.py", "cluster_gui.py",
+    "grouper.py", "cluster.py", "cluster_tab.py", "guide_tab.py",
     "version.txt",
 ]
 

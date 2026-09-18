@@ -46,7 +46,7 @@ import license_client
 # src/ guncellenince yeniden yuklenmesi gereken uygulama modulleri.
 _APP_MODULES = ("main", "gui", "core", "extractor", "code_finder",
                 "renamer", "config", "theme", "cli", "updater", "dnd",
-                "grouper", "cluster", "cluster_gui")
+                "grouper", "cluster", "cluster_tab", "guide_tab")
 
 
 def _local_version() -> str:
@@ -75,7 +75,7 @@ def _show_error(message: str) -> None:
         from tkinter import Tk, messagebox
         root = Tk()
         root.withdraw()
-        messagebox.showerror("PDF Renamer - Critical Error", message)
+        messagebox.showerror("PDF Clerk - Critical Error", message)
         root.destroy()
     except Exception:
         try:

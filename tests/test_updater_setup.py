@@ -148,3 +148,47 @@ def test_hash_lines_are_hidden_from_the_user():
     assert "Kumeleme eklendi" in msg
     assert "SHA256" not in msg
     assert ZIP_SHA not in msg and SETUP_SHA not in msg
+
+
+# -- kapisiz EXE'yi yakalama -------------------------------------------------
+#
+# Lisans kapisi EXE'nin ICINE gomulu; src.zip guncellemesi EXE'yi
+# degistiremez. Yani eski bir EXE en guncel kodu alsa bile kapisiz kalir ve
+# kullanici guncellemeyi reddederse sonsuza kadar izinsiz calisir.
+#
+# updater artik src/ icinde ve guncel oldugu icin kendi EXE'sini sorgulayabilir:
+# license_client SADECE kapili EXE'lerin icinde bulunur, dolayisiyla import
+# denemesi "bu EXE kapili mi?" sorusunu cevaplar.
+
+def test_the_gate_is_detected_when_the_client_can_be_imported(monkeypatch):
+    monkeypatch.setattr(updater, "_import_license_client", lambda: object())
+    assert updater.gate_present() is True
+
+
+def test_a_missing_client_means_the_exe_has_no_gate(monkeypatch):
+    def boom():
+        raise ImportError("no module named license_client")
+    monkeypatch.setattr(updater, "_import_license_client", boom)
+    assert updater.gate_present() is False
+
+
+def test_a_gateless_exe_must_take_the_full_install(monkeypatch):
+    monkeypatch.setattr(updater, "gate_present", lambda: False)
+    assert updater.decide_update_kind(_info(SETUP_SHA)) == "required"
+
+
+def test_a_gated_exe_is_merely_offered_the_full_install(monkeypatch):
+    monkeypatch.setattr(updater, "gate_present", lambda: True)
+    assert updater.decide_update_kind(_info(SETUP_SHA)) == "setup"
+
+
+def test_without_a_setup_a_gateless_exe_is_not_nagged(monkeypatch):
+    """Kuracak bir sey yoksa zorunlu demenin anlami yok."""
+    monkeypatch.setattr(updater, "gate_present", lambda: False)
+    assert updater.decide_update_kind(_info(None)) == "code"
+
+
+def test_a_required_update_says_it_cannot_be_skipped(monkeypatch):
+    monkeypatch.setattr(updater, "gate_present", lambda: False)
+    low = updater.update_prompt(_info(SETUP_SHA)).lower()
+    assert "required" in low

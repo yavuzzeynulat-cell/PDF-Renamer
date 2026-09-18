@@ -38,6 +38,7 @@ class ClusterResult:
     message: str                  # kullaniciya gosterilecek aciklama
     path: str = ""                # kaynak dosyanin TAM YOLU
     copies: list = field(default_factory=list)  # olusan/olusacak tam yollar
+    moved: bool = False           # orijinal kaynaktan kaldirildi mi
 
 
 @dataclass
@@ -45,6 +46,7 @@ class ClusterSummary:
     results: list = field(default_factory=list)
     matched: int = 0              # en az bir kumeye giren DOSYA sayisi
     copies: int = 0               # olusan KOPYA sayisi (bir dosya birkac kez)
+    moved: int = 0                # kaynaktan kaldirilan DOSYA sayisi
     no_match: int = 0
     errors: int = 0
     # Onizlemede bulunan kumeler: tam-yol -> [kume adlari].
@@ -90,10 +92,10 @@ def cluster_one(pdf_path: str, settings: Settings,
         return ClusterResult(name, [], "no_match",
                              "No group name found.", pdf_path)
 
-    target_root = settings.target_folder
-    if not target_root:
-        return ClusterResult(name, groups, "error",
-                             "No target folder selected.", pdf_path)
+    # Hedef verilmediyse kumeler dosyanin KENDI klasorunde acilir: arayuzde
+    # tek klasor secilir, islenenler alt klasorlere gider, kokte kalanlar
+    # "henuz islenmemis" demektir.
+    target_root = settings.target_folder or os.path.dirname(pdf_path)
 
     made: list[str] = []
     for group in groups:
@@ -113,11 +115,22 @@ def cluster_one(pdf_path: str, settings: Settings,
     count = len(made)
     plural = "" if count == 1 else "s"
     if settings.dry_run:
+        verb = "Will be moved" if settings.move_originals else "Will be copied"
         return ClusterResult(name, groups, "preview",
-                             "Will be copied into {0} folder{1}.".format(count, plural),
+                             "{0} into {1} folder{2}.".format(verb, count, plural),
                              pdf_path, made)
+
+    # Tasima = once kopyala, KOPYALARI DOGRULA, sonra orijinali kaldir. Sira
+    # boyle olmali: dogrulama gecmezse orijinal yerinde kalir ve hicbir
+    # kosulda elimizde tek nusha kalmaz.
+    moved = False
+    if settings.move_originals and _copies_are_sound(pdf_path, made):
+        moved = renamer.recycle(pdf_path)
+
+    verb = "Moved" if moved else "Copied"
     return ClusterResult(name, groups, "copied",
-                         "Copied into {0} folder{1}.".format(count, plural), pdf_path, made)
+                         "{0} into {1} folder{2}.".format(verb, count, plural),
+                         pdf_path, made, moved)
 
 
 def _cluster_paths(paths: list, settings: Settings,
@@ -134,6 +147,8 @@ def _cluster_paths(paths: list, settings: Settings,
         if result.status in ("copied", "preview"):
             summary.matched += 1
             summary.copies += len(result.copies)
+            if result.moved:
+                summary.moved += 1
         elif result.status == "no_match":
             summary.no_match += 1
         else:
@@ -161,3 +176,24 @@ def cluster_files(paths, settings: Settings,
     """Acikca verilen PDF'leri (veya klasorleri) kumeler -- surukle-birak icin."""
     return _cluster_paths(core.expand_pdf_paths(paths, settings.recursive),
                           settings, progress, group_overrides)
+
+
+def _copies_are_sound(src_path: str, made: list) -> bool:
+    """Her kopya diskte var mi ve boyutu orijinalle ayni mi?
+
+    Orijinali kaldirmadan onceki tek kontrol noktasi burasi. Tek bir kopya
+    bile eksik ya da yarim ise False doner ve orijinale dokunulmaz.
+    """
+    if not made:
+        return False
+    try:
+        size = os.path.getsize(src_path)
+    except OSError:
+        return False
+    for dest in made:
+        try:
+            if not os.path.isfile(dest) or os.path.getsize(dest) != size:
+                return False
+        except OSError:
+            return False
+    return True

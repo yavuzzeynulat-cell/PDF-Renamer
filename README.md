@@ -1,11 +1,21 @@
-# PDF Otomatik İsimlendirici V2.2
+# PDF Clerk  ·  v2.2
 
-PDF'lerin içindeki doküman kodunu (varsayılan: `26437-LAB-...`) okuyup dosyayı
-otomatik olarak `<kod>.pdf` şeklinde yeniden adlandıran araç.
+Taranmış PDF'leri okuyup iki iş yapar:
 
-> Bu sürüm, Yavuz'un V1.0 konsol programının üzerine modüler mimari, pencereli
-> arayüz, çok sayfalı tarama, OCR desteği ve güvenli geri-alma eklenerek
-> geliştirilmiştir. **Eski davranış birebir korunmuştur.**
+| Sekme | Ne yapar |
+|-------|----------|
+| **Rename** | İçindeki doküman kodunu (varsayılan `26437-LAB-...`) okur, dosyayı `<kod>.pdf` olarak **yerinde** yeniden adlandırır. |
+| **Cluster** | İçinde geçen *küme adlarını* (örn. `B0051 Bridge`) bulur, dosyayı o adlı klasörlere **dosyalar**. Eşleşenler klasörden kalkar; geriye yalnızca işlenmemişler kalır. |
+
+> Program "PDF Renamer" adıyla, Yavuz'un V1.0 konsol programının üzerine
+> modüler mimari, pencereli arayüz, çok sayfalı tarama, OCR ve güvenli
+> geri-alma eklenerek doğdu. Kümeleme gelince artık sadece adlandırmadığı
+> için **PDF Clerk** adını aldı. **Eski davranış birebir korunmuştur.**
+>
+> Görünen ad değişti; kurulum kimliği, lisans `PROGRAM_ID`'si, güncelleme
+> adresi ve `PDF-Renamer.exe` dosya adı **bilerek** aynı kaldı — bunlar
+> değişseydi mevcut kullanıcılarda ikinci bir kurulum olur, lisans kopar ve
+> güncelleme dururdu. `tests/test_identity.py` bunu koruyor.
 
 ---
 
@@ -44,7 +54,7 @@ otomatik olarak `<kod>.pdf` şeklinde yeniden adlandıran araç.
 
 | Özellik | Açıklama |
 |---------|----------|
-| 🗂️ **Kümeleme (Cluster)** | Ana penceredeki **Cluster** düğmesi ayrı bir pencere açar. Yazdığın *küme adlarını* PDF'lerin içinde arar ve her dosyayı, içinde geçen **her** küme adının klasörüne **kopyalar**. |
+| 🗂️ **Kümeleme (Cluster)** | Başlığın altındaki **Cluster** sekmesi. Yazdığın *küme adlarını* PDF'lerin içinde arar ve her dosyayı, içinde geçen **her** küme adının klasörüne **kopyalar**. Liste, çalıştırdıktan sonra her kümeye kaç dosya düştüğünü gösterir. |
 
 **Kümeleme neyi yapar, neyi yapmaz**
 
@@ -105,7 +115,7 @@ gui.py           # Tkinter pencereli arayüz
 dnd.py           # Windows sürükle-bırak kancası (WM_DROPFILES, ek paket yok)
 grouper.py       # Kümeleme: metinde küme adlarını bulma (saf mantık)
 cluster.py       # Kümeleme orkestrasyonu: bul + hedef klasörlere kopyala
-cluster_gui.py   # Kümeleme penceresi (ayrı pencere, ana akışa karışmaz)
+cluster_tab.py   # Kümeleme sekmesi (ana pencerede yaşar, sunum katmanı)
 updater.py       # GitHub release'lerinden otomatik güncelleme
 launcher.py      # EXE giriş noktası: uygulamayı src/ klasöründen yükler
 cli.py           # Konsol sürümü (eski tarz)
@@ -138,6 +148,25 @@ Açmak için:
 4. Programı çalıştır → panelde cihaz **Pending** görünür → **+30d** ver
 
 Bu makinenin kodu: `9A71-7EB9-E3A1-6748`
+
+### Kapısız kurulumlar nasıl kapatılıyor
+
+Lisans kapısı **EXE'nin içinde**; `src.zip` güncellemesi EXE'yi değiştiremez.
+Yani kapı eklenmeden önce kurulmuş bir kopya, en güncel kodu alsa bile
+izinsiz açılmaya devam eder — diğer bilgisayarda tam olarak bu oldu.
+
+`updater.py` artık `src/` ile güncellendiği için kendi EXE'sini sorgulayabiliyor:
+`license_client` **yalnızca** kapılı EXE'lerin içine gömülür, `src.zip` ile
+dağıtılmaz. Dolayısıyla import edilebiliyorsa kapı vardır.
+
+| Durum | Davranış |
+|-------|----------|
+| Kapı var, release'te setup var | Tam kurulum **teklif** edilir |
+| Kapı **yok**, release'te setup var | Tam kurulum **zorunlu** — reddedilirse program kapanır |
+| Release'te setup yok | Yalnızca kod güncellenir |
+
+Bu yüzden **her release'e setup eklenmeli**; aksi halde kapısız kopyalar
+kendiliğinden kapanamaz.
 
 > **Dikkat — iki güncelleme sistemi.** Bu program kendi `updater.py`'ı ile
 > GitHub release'lerinden güncelleniyor. `license_client` de panel üzerinden

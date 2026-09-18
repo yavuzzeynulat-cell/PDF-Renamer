@@ -69,7 +69,7 @@ SECRET = _load_secret(UNCONFIGURED_SECRET)
 SERVER_URL = os.environ.get(
     "LICENSE_SERVER_URL", "https://license-panel.yavuzzeynulat.workers.dev")
 
-TITLE = "PDF Renamer"
+TITLE = "PDF Clerk"
 
 WARN_DAYS = 3         # kalan gün bunun altındaysa uyar ama çalıştır
 TIMEOUT = 5           # saniye, tek deneme

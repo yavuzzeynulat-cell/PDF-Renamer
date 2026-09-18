@@ -245,3 +245,55 @@ def safe_copy(src_path: str, dest_folder: str, *,
         return CopyOutcome(src_path, None, "error", str(exc))
 
     return CopyOutcome(src_path, dst, "copied", f"Copied to '{target}'.")
+
+
+# ---------------------------------------------------------------------------
+# Geri Donusum Kutusu
+#
+# Kumeleme, kopyalari dogruladiktan sonra orijinali kaynaktan kaldirir.
+# Kalici silmek yerine kutuya gonderiyoruz: kullanici fikrini degistirirse
+# tek tikla geri alabilsin. Ek bir paket kullanmiyoruz; Windows'un kendi
+# SHFileOperation cagrisi FOF_ALLOWUNDO ile tam olarak bunu yapar.
+# ---------------------------------------------------------------------------
+
+def recycle(path: str) -> bool:
+    """`path` dosyasini Geri Donusum Kutusu na gonderir. Basarisizsa False.
+
+    Hicbir istisna firlatmaz: cagiran taraf False gorunce orijinali yerinde
+    birakir, boylece basarisiz bir kaldirma veri kaybina donusmez.
+    """
+    if not os.path.isfile(path):
+        return False
+
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class _SHFILEOPSTRUCTW(ctypes.Structure):
+            _fields_ = [
+                ("hwnd", wintypes.HWND),
+                ("wFunc", wintypes.UINT),
+                ("pFrom", wintypes.LPCWSTR),
+                ("pTo", wintypes.LPCWSTR),
+                ("fFlags", ctypes.c_uint16),
+                ("fAnyOperationsAborted", wintypes.BOOL),
+                ("hNameMappings", ctypes.c_void_p),
+                ("lpszProgressTitle", wintypes.LPCWSTR),
+            ]
+
+        FO_DELETE = 3
+        FOF_SILENT = 0x0004
+        FOF_NOCONFIRMATION = 0x0010
+        FOF_ALLOWUNDO = 0x0040
+        FOF_NOERRORUI = 0x0400
+
+        # pFrom cift NULL ile bitmeli (liste sonu isareti).
+        op = _SHFILEOPSTRUCTW(
+            None, FO_DELETE, os.path.abspath(path) + "\0\0", None,
+            FOF_SILENT | FOF_NOCONFIRMATION | FOF_ALLOWUNDO | FOF_NOERRORUI,
+            False, None, None)
+        result = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
+    except Exception:
+        return False
+
+    return result == 0 and not os.path.isfile(path)

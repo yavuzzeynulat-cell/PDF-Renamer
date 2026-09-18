@@ -331,7 +331,7 @@ def run_update_flow(info: "UpdateInfo", parent_window=None) -> bool:
     """
     from tkinter import messagebox
 
-    if decide_update_kind(info) == "setup":
+    if decide_update_kind(info) in ("setup", "required"):
         return _run_setup_flow(info, parent_window)
 
     tmp_zip = os.path.join(tempfile.gettempdir(), "PDF-Renamer_update.zip")
@@ -376,10 +376,37 @@ def run_update_flow(info: "UpdateInfo", parent_window=None) -> bool:
 # SHA256 zorunludur, tutmazsa dosya diskte birakilmaz ve hicbir sey calismaz.
 # ---------------------------------------------------------------------------
 
+def _import_license_client():
+    """Lisans kapisini import etmeyi dener (test icin ayri tutuldu)."""
+    import license_client
+    return license_client
+
+
+def gate_present() -> bool:
+    """Bu EXE lisans kapisiyla mi derlenmis?
+
+    license_client SADECE kapili EXE'lerin icine gomulur; src.zip ile
+    dagitilmaz. Bu yuzden import edilebiliyorsa kapi vardir.
+    """
+    try:
+        _import_license_client()
+    except Exception:
+        return False
+    return True
+
+
 def decide_update_kind(info: "UpdateInfo") -> str:
-    """'setup' = tam kurulum, 'code' = yalnizca src.zip (saf - test edilir)."""
+    """'required' | 'setup' | 'code' (saf - test edilir).
+
+    required : bu EXE kapisiz ve kurulacak bir setup var. Kapi EXE'nin
+               icinde oldugu icin src.zip onu getiremez; kullanici
+               guncellemeyi atlarsa program izinsiz calismaya devam eder.
+               Bu yuzden atlanamaz.
+    setup    : kapi zaten var, tam kurulum yine de teklif edilir.
+    code     : setup yok, yalnizca kod guncellenir.
+    """
     if info.setup_url and info.setup_sha256:
-        return "setup"
+        return "setup" if gate_present() else "required"
     return "code"
 
 
@@ -403,7 +430,13 @@ def update_prompt(info: "UpdateInfo") -> str:
     notes = _visible_notes(info.notes)
     if notes:
         parts.append(notes)
-    if decide_update_kind(info) == "setup":
+    kind = decide_update_kind(info)
+    if kind == "required":
+        parts.append("This update is required. This copy was installed "
+                     "before licence checking was added, so it still opens "
+                     "without permission. The app will close and the "
+                     "installer will run.")
+    elif kind == "setup":
         parts.append("This is a full install: the app will close and the "
                      "installer will run. It may take a few minutes.")
     else:

@@ -9,7 +9,7 @@
 ;
 ; Note: build dist\PDF-Renamer.exe first (see Derle-EXE.bat).
 
-#define MyAppName "PDF Renamer"
+#define MyAppName "PDF Clerk"
 ; Surum version.txt'ten okunur; elle tutulursa kayiyor (ornekte "2.0"
 ; kalmisti, program 2.1.0 iken).
 #define VerFile = FileOpen("version.txt")
@@ -19,6 +19,10 @@
 #define MyAppExe "PDF-Renamer.exe"
 
 [Setup]
+; Kurulum kimligi ILK addan gelir ve ASLA degismez. Inno, AppId
+; verilmezse uygulamayi AppName ile tanir; gorunen ad degisince
+; mevcut kullanicida ikinci bir kurulum olusurdu.
+AppId=PDF Renamer
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}

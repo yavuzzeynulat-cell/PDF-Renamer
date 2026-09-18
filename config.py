@@ -50,8 +50,14 @@ class Settings:
     # hangileri geciyorsa, dosya o adli klasorlere KOPYALANIR; dosya adi
     # degismez ve orijinal yerinde kalir.
     phrases: list = field(default_factory=list)
-    # Kume klasorlerinin acilacagi ust klasor.
+    # Kume klasorlerinin acilacagi ust klasor. BOS birakilirsa her dosya
+    # kendi klasorunun icinde kumelenir -- arayuzde tek klasor secilir ve
+    # kumeler onun icinde acilir, kokte kalanlar "islenmemisler" olur.
     target_folder: str = ""
+    # Kumelere giren dosya kaynaktan kalksin mi? Varsayilan EVET: kullanici
+    # kaynak klasore bakip ne kaldigini gorebilsin diye. Kalici silinmez,
+    # Geri Donusum Kutusu na gider.
+    move_originals: bool = True
 
     def effective_folder(self) -> str:
         import os
