@@ -173,3 +173,30 @@ def test_recycle_removes_the_file_from_disk(tmp_path):
 
 def test_recycle_reports_failure_for_a_missing_file(tmp_path):
     assert renamer.recycle(str(tmp_path / "olmayan.pdf")) is False
+
+
+# -- tasima basarisiz olursa SEBEBI yaz -------------------------------------
+
+def test_a_file_that_cannot_be_removed_says_so(workspace, monkeypatch):
+    """Dosya aciksa Geri Donusum Kutusu na gonderilemez. Eskiden mesaj
+    sadece 'Copied' diyordu ve kullanici neden bazilarinin 'Moved',
+    birinin 'Copied' oldugunu anlayamiyordu."""
+    src, target, _ = workspace
+    monkeypatch.setattr(renamer, "recycle", lambda path: False)
+
+    summary = cluster.cluster_folder(_settings(target, folder=str(src)))
+    message = {r.file_name: r.message for r in summary.results}["bir.pdf"]
+
+    assert "original kept" in message.lower()
+    assert "open" in message.lower(), "neden acikca yazilmali"
+    assert summary.moved == 0
+
+
+def test_an_unverifiable_copy_says_so_too(workspace, monkeypatch):
+    src, target, _ = workspace
+    monkeypatch.setattr(cluster, "_copies_are_sound", lambda s, m: False)
+
+    summary = cluster.cluster_folder(_settings(target, folder=str(src)))
+    message = {r.file_name: r.message for r in summary.results}["bir.pdf"]
+
+    assert "original kept" in message.lower()

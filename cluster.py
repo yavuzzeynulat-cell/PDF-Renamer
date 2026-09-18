@@ -124,12 +124,22 @@ def cluster_one(pdf_path: str, settings: Settings,
     # boyle olmali: dogrulama gecmezse orijinal yerinde kalir ve hicbir
     # kosulda elimizde tek nusha kalmaz.
     moved = False
-    if settings.move_originals and _copies_are_sound(pdf_path, made):
-        moved = renamer.recycle(pdf_path)
+    if settings.move_originals:
+        if _copies_are_sound(pdf_path, made):
+            moved = renamer.recycle(pdf_path)
 
-    verb = "Moved" if moved else "Copied"
-    return ClusterResult(name, groups, "copied",
-                         "{0} into {1} folder{2}.".format(verb, count, plural),
+    if moved:
+        message = "Moved into {0} folder{1}.".format(count, plural)
+    elif settings.move_originals:
+        # Tasima istendi ama olmadi. Kullanici listede neden bazi satirlarin
+        # "Moved", birinin "Copied" oldugunu anlayamiyordu; sebebi yaziyoruz.
+        message = ("Copied into {0} folder{1} - original kept because it "
+                   "could not be removed; the file may be open."
+                   .format(count, plural))
+    else:
+        message = "Copied into {0} folder{1}.".format(count, plural)
+
+    return ClusterResult(name, groups, "copied", message,
                          pdf_path, made, moved)
 
 
