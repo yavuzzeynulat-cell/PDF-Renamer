@@ -41,21 +41,39 @@ def tkfont(size, weight=None):
 
 
 def make_background(w, h):
+    """Buzlu mavi arka plan.
+
+    Iki kalite sorunu vardi ve ikisi de mavi alanlarda goze batiyordu:
+      1) Degrade 8-bit adimlarla uretiliyordu -> genis mavi yuzeyde bantlanma
+         (kullanicinin "pikselli" dedigi sey).
+      2) Gorsel bir kez uretilip pencere boyutuna GERDIRILIYORDU; buyutme
+         degradeyi ve isik lekelerini kabalastiriyordu.
+    Cozum: degrade her boyutta yeniden ve yuksek kalitede uretilir, uzerine
+    gozle gorulmeyen ince bir gurultu eklenir -- gurultu bant siniriini kirar,
+    goz duz bir gecis gorur (standart "dither" yontemi).
+    """
     top = Image.new("RGB", (w, h), GRAD_TOP)
     bottom = Image.new("RGB", (w, h), GRAD_BOTTOM)
-    mask = Image.new("L", (w, h))
-    md = mask.load()
-    for y in range(h):
-        v = int(255 * (y / h))
-        for x in range(w):
-            md[x, y] = v
+    # 256x256'lik hazir degradeyi yuksek kaliteli olcekleme ile buyutuyoruz:
+    # piksel piksel donguden hem daha duzgun hem cok daha hizli.
+    mask = Image.linear_gradient("L").resize((w, h), Image.LANCZOS)
     base = Image.composite(bottom, top, mask).convert("RGBA")
+
     glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     gd = ImageDraw.Draw(glow)
     gd.ellipse([-120, -160, 320, 240], fill=(255, 255, 255, 130))
     gd.ellipse([w - 320, h - 280, w + 140, h + 120], fill=(120, 180, 255, 95))
     glow = glow.filter(ImageFilter.GaussianBlur(65))
-    return Image.alpha_composite(base, glow)
+    out = Image.alpha_composite(base, glow)
+    return _dither(out)
+
+
+def _dither(img):
+    """Bantlanmayi kiran, fark edilmeyecek kadar hafif gurultu (+-1 ton)."""
+    noise = Image.effect_noise(img.size, 6).convert("L")
+    grain = Image.merge("RGBA", (noise, noise, noise,
+                                 Image.new("L", img.size, 10)))
+    return Image.alpha_composite(img, grain)
 
 
 def rounded_rect(size, radius, fill, border=None, border_w=0):

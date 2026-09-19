@@ -461,12 +461,9 @@ def update_prompt(info: "UpdateInfo") -> str:
     if notes:
         parts.append(notes)
     kind = decide_update_kind(info)
-    if kind == "required":
-        parts.append("This update is required. This copy was installed "
-                     "before licence checking was added, so it still opens "
-                     "without permission. The app will close and the "
-                     "installer will run.")
-    elif kind == "setup":
+    # "required" da "setup" gibi anlatilir: kullaniciya zorunlu oldugu
+    # SOYLENMEZ, sadece normal bir tam kurulum gibi gorunur.
+    if kind in ("required", "setup"):
         parts.append("This is a full install: the app will close and the "
                      "installer will run. It may take a few minutes.")
     else:

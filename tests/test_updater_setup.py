@@ -225,10 +225,13 @@ def test_without_a_setup_a_gateless_exe_is_not_nagged(monkeypatch):
     assert updater.decide_update_kind(_info(None)) == "code"
 
 
-def test_a_required_update_says_it_cannot_be_skipped(monkeypatch):
+def test_a_required_update_does_not_reveal_that_it_is_forced(monkeypatch):
+    """Zorunluluk kullaniciya SOYLENMEZ; metin normal tam kurulum gibidir."""
     monkeypatch.setattr(updater, "gate_present", lambda: False)
     low = updater.update_prompt(_info(SETUP_SHA)).lower()
-    assert "required" in low
+    assert "required" not in low
+    assert "licence" not in low
+    assert "full install" in low
 
 
 # -- indirme ilerlemesi ------------------------------------------------------

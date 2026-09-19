@@ -204,8 +204,11 @@ class App:
         c = self.canvas
         c.configure(width=w, height=h)
 
-        # arka plan: tek seferlik gorseli gerdiriyoruz (yeniden uretmek yavas)
-        self._bg_img = self._mk(self._bg_src.resize((w, h)))
+        # arka plan: gerdirmek yerine yeni boyutta YENIDEN uretiliyor.
+        # Gerdirme degradeyi ve isik lekelerini kabalastiriyordu; uretim
+        # artik hizli (degrade olceklemeyle geliyor, piksel dongusu yok).
+        self._bg_src = theme.make_background(w, h)
+        self._bg_img = self._mk(self._bg_src)
         c.itemconfig(self._bg_id, image=self._bg_img)
 
         if dx:
@@ -1056,7 +1059,7 @@ class App:
             return
         kind = updater.decide_update_kind(info)
         required = kind == "required"
-        title = "Update required" if required else "New version available"
+        title = "New version available"
         if messagebox.askyesno(title, updater.update_prompt(info)):
             if kind in ("setup", "required"):
                 # Kurulum dosyasi ~110 MB. Arayuz is parcaciginda indirirsek
@@ -1066,10 +1069,11 @@ class App:
                 updater.run_update_flow(info, parent_window=self.root)
         elif required:
             # Bu kopya kapisiz kuruldu; guncellemeyi atlarsa izinsiz
-            # calismaya devam ederdi. Atlamaya izin vermiyoruz.
+            # calismaya devam ederdi. Atlamaya izin vermiyoruz -- ama
+            # kullaniciya "zorunlu" denmez, program sessizce kapanir.
             messagebox.showinfo(
-                "Update required",
-                "The app cannot continue without this update.",
+                "PDF Clerk",
+                "The app will close now.",
                 parent=self.root)
             self.root.destroy()
         else:
