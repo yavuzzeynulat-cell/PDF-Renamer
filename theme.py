@@ -172,6 +172,10 @@ def splash_image(w, h, title, subtitle):
     mask = Image.new("L", (w * SS, h * SS), 0)
     ImageDraw.Draw(mask).rounded_rectangle(
         [0, 0, w * SS - 1, h * SS - 1], radius=26 * SS, fill=255)
-    mask = _shrink(mask, (w, h))
+    # Splash penceresi saydamligi "-transparentcolor" ile yapiyor (macenta
+    # anahtar renk). Yari saydam kenar pikselleri o macentayla karisip
+    # KIRMIZIMSI bir cizgi birakiyordu; bu yuzden splash maskesi -- ve
+    # yalnizca o -- kesin (0/255) olmali. Butonlarda yumusatma duruyor.
+    mask = _shrink(mask, (w, h)).point(lambda v: 255 if v >= 128 else 0)
     bg.putalpha(mask)
     return bg
