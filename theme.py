@@ -76,13 +76,25 @@ def _dither(img):
     return Image.alpha_composite(img, grain)
 
 
+# PIL'in cizim fonksiyonlari kenar YUMUSATMASI yapmaz: yuvarlak bir kosede
+# piksel ya tam dolu ya bos olur, bu da mavi dugmelerde merdiven basamagi
+# ("pikselli") gorunumu verir. Cozum supersampling: sekli SS kat buyuk cizip
+# yuksek kaliteli olceklemeyle kucultuyoruz -- ara tonlar boyle olusuyor.
+SS = 4
+
+
+def _shrink(img, size):
+    return img.resize(size, Image.LANCZOS)
+
+
 def rounded_rect(size, radius, fill, border=None, border_w=0):
     w, h = size
-    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    big = (w * SS, h * SS)
+    img = Image.new("RGBA", big, (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    d.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, fill=fill,
-                        outline=border, width=border_w)
-    return img
+    d.rounded_rectangle([0, 0, big[0] - 1, big[1] - 1], radius=radius * SS,
+                        fill=fill, outline=border, width=border_w * SS)
+    return _shrink(img, (w, h))
 
 
 def card_with_shadow(size, radius, pad=32):
@@ -131,11 +143,15 @@ def button_image(w, h, text, kind="accent"):
 def toggle_image(on=True):
     w, h = 42, 24
     track = ACCENT + (255,) if on else (190, 204, 218, 255)
-    img = rounded_rect((w, h), h // 2, track)
-    r = h - 8
-    cx = w - 4 - r if on else 4
-    ImageDraw.Draw(img).ellipse([cx, 4, cx + r, 4 + r], fill=(255, 255, 255, 255))
-    return img
+    big = (w * SS, h * SS)
+    img = Image.new("RGBA", big, (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([0, 0, big[0] - 1, big[1] - 1], radius=(h // 2) * SS,
+                        fill=track)
+    r = (h - 8) * SS
+    cx = (w - 4) * SS - r if on else 4 * SS
+    d.ellipse([cx, 4 * SS, cx + r, 4 * SS + r], fill=(255, 255, 255, 255))
+    return _shrink(img, (w, h))
 
 
 def splash_image(w, h, title, subtitle):
@@ -153,7 +169,9 @@ def splash_image(w, h, title, subtitle):
     d.text(((w - (sb[2] - sb[0])) / 2 - sb[0], h * 0.56), subtitle, font=sf,
            fill=ACCENT_HEX)
     # yuvarlak koseler: disari saydam (kare gorunumu giderir)
-    mask = Image.new("L", (w, h), 0)
-    ImageDraw.Draw(mask).rounded_rectangle([0, 0, w - 1, h - 1], radius=26, fill=255)
+    mask = Image.new("L", (w * SS, h * SS), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        [0, 0, w * SS - 1, h * SS - 1], radius=26 * SS, fill=255)
+    mask = _shrink(mask, (w, h))
     bg.putalpha(mask)
     return bg
