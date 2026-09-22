@@ -56,6 +56,33 @@ Taranmış PDF'leri okuyup iki iş yapar:
 |---------|----------|
 | 🗂️ **Kümeleme (Cluster)** | Başlığın altındaki **Cluster** sekmesi. Yazdığın *küme adlarını* PDF'lerin içinde arar ve her dosyayı, içinde geçen **her** küme adının klasörüne **kopyalar**. Liste, çalıştırdıktan sonra her kümeye kaç dosya düştüğünü gösterir. |
 
+**İki eşleştirme kipi var, seçimi sen yaparsın**
+
+| Kip | Ne yapar |
+|-----|----------|
+| *Varsayılan* | Yazdığın tümceyi **sayfa metninde** arar. `B0051 Bridge` gibi adlar için doğru olan bu. |
+| **Match code segments** | Yalnızca **belge koduna** bakar. Kod tirelerden bölünür ve terimin **ardışık segment dizisi** olarak geçip geçmediğine bakılır. |
+
+Segment kipi, belge numarasının bir bölümüne göre gruplamak için:
+`26437-RIA-04C-DR-ID-00022` kodu `26437 · RIA · 04C · DR · ID · 00022`
+parçalarına ayrılır.
+
+| Yazdığın | Sonuç | Neden |
+|----------|-------|-------|
+| `ID` | ✅ | tek segment olarak var |
+| `04C-DR-ID` | ✅ | üçü ardışık ve sıralı |
+| `DR-ID` | ✅ | ikisi yan yana |
+| `RIA-ID` | ❌ | ardışık değil, arada `04C-DR` var |
+| `ID-DR` | ❌ | sıra ters |
+| `VALID` | ❌ | tam segment değil — segmentin içine bakılmaz |
+
+Sayfada geçen `VALID`, `GRID`, `IDENTIFICATION` gibi kelimeler bu kipte
+dosyayı içeri çekmez; düz metin aramasının asıl sorunu buydu.
+
+Hangi kodun okunacağını **Code prefix** belirler (`26437-RIA-` bugün,
+`26437-LAB-` yarın). Bu kutu, Rename sekmesindeki önek alanının **aynısıdır**:
+birinden değiştirince diğeri de değişir, iki ayrı yerde tutulmaz.
+
 **Kümeleme neyi yapar, neyi yapmaz**
 
 - Dosya **adına dokunmaz** — dosyalar bu aşamaya gelmeden önce zaten

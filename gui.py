@@ -34,7 +34,7 @@ import core
 import dnd
 import updater
 
-W, H = 1080, 770
+W, H = 1080, 880
 
 CREDIT = "Developed by Yavuz Zeynula"
 DROP_HINT = "Drop PDF files or folders here  -  they are renamed where they are"

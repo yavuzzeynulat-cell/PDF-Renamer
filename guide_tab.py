@@ -28,6 +28,12 @@ CLUSTER_STEPS = [
 ]
 
 NOTES = [
+    ("Group by part of the document number.",
+     "Turn Match code segments on and the names are matched against the "
+     "document code instead of the page text: type ID to gather every "
+     "26437-RIA-04C-DR-ID-00022, or 04C-DR-ID for that run of segments. "
+     "VALID on the page no longer drags a file in. Code prefix decides "
+     "which codes are read, and it is the same box as on the Rename tab."),
     ("Turn OCR on for scanned PDFs.",
      "Scans have no text layer. OCR also loses spaces and letter case, so "
      "while it is on, group names match regardless of spacing and case. "

@@ -108,7 +108,7 @@ class ClusterTab:
         vsb.pack(side="right", fill="y")
         self.app._tag(self.canvas.create_window(cl, 172, anchor="nw",
                                                 window=frame, width=self.lw,
-                                                height=196), "sw")
+                                                height=300), "sw")
         # Teker teker silme: cift tik, Delete tusu veya sag tik menusu.
         self.groups.bind("<Double-1>", lambda _e: self.on_remove())
         self.groups.bind("<Delete>", lambda _e: self.on_remove())
@@ -118,16 +118,16 @@ class ClusterTab:
         self._menu.add_command(label="Remove", command=self.on_remove)
         self._menu.add_command(label="Remove all", command=self.on_clear)
 
-        self._count_id = self._text(cl, 378, "", theme.tkfont(9), theme.SLATE)
+        self._count_id = self._text(cl, 502, "", theme.tkfont(9), theme.SLATE)
         # Toplu silme gorunur bir baglanti; teker teker silme satirin kendisinde.
         clear_id = self.app._tag(
-            self._text(cl + self.lw, 378, "Clear all",
+            self._text(cl + self.lw, 502, "Clear all",
                        theme.tkfont(9, "bold"), theme.ACCENT_HEX,
                        anchor="ne"), "ar")
         self.canvas.tag_bind(clear_id, "<Button-1>", lambda _e: self.on_clear())
         self.app._cursor(clear_id)
         box = self.canvas.bbox(clear_id)
-        self.app._tag(self._text(box[0] - 12, 378,
+        self.app._tag(self._text(box[0] - 12, 502,
                                  "Double-click a name to remove one",
                                  theme.tkfont(9), theme.MUTED, anchor="ne"),
                       "ar")
@@ -170,22 +170,50 @@ class ClusterTab:
                                  "Group folders are created inside this folder.",
                                  theme.tkfont(9), theme.MUTED, width=rw), "ar")
 
-        # OCR dugmesi ayni zamanda ESLESTIRME KIPINI belirler.
+        # Iki anahtar birlikte eslestirme kipini belirler; _paint_mode
+        # ikisini de okudugu icin ikisi de ondan ONCE var olmali.
         self.var_ocr = tk.BooleanVar(value=False)
+        self.var_seg = tk.BooleanVar(value=False)
         self._toggle(rx, 214, "OCR (scanned PDFs)", self.var_ocr,
                      self._on_ocr_flip)
-        # Sayfanin tek canli cumlesi: ne bulacagini belirleyen sey bu.
+
+        # Kod segmenti kipi. Adi metnin tamaminda degil, BELGE KODUNUN
+        # tirelerden bolunmus parcalarinda arar: "ID" yazinca sayfada gecen
+        # "VALID", "GRID" gibi kelimelere takilmaz, yalnizca kodunda ID
+        # segmenti olan belgeler toplanir.
+        self._toggle(rx, 252, "Match code segments", self.var_seg,
+                     self._on_seg_flip)
+
+        # Sayfanin tek canli cumlesi: ne bulacagini belirleyen sey bu. Iki
+        # anahtari birden anlattigi icin ikisinin de ALTINDA duruyor -- yukari
+        # koyulunca yalnizca OCR'i acikliyormus gibi okunuyordu.
         self._mode_id = self.app._tag(
-            self._text(rx, 252, "", theme.tkfont(11), theme.ACCENT_HEX,
+            self._text(rx, 292, "", theme.tkfont(11), theme.ACCENT_HEX,
                        width=rw), "ar")
         self._paint_mode()
 
+        # Hangi kodun okunacagini belirleyen onek. Rename sekmesindeki
+        # alanla AYNI degiskendir: kod numaralari degisir (26437-RIA- bugun,
+        # 26437-LAB- yarin) ve iki yerde ayri ayri tutulursa kacinilmaz
+        # olarak birbirinden kayar.
+        self.app._tag(self._text(rx, 352, "CODE PREFIX",
+                                 theme.tkfont(9, "bold"), theme.SLATE), "ar")
+        self.app._tag(self._text(self.cr, 352, "same as Rename tab",
+                                 theme.tkfont(9), theme.MUTED,
+                                 anchor="ne"), "ar")
+        pre = tk.Entry(self.root, textvariable=self.app.var_prefix,
+                       **self._entry_kw())
+        self.app._tag(self.canvas.create_window(rx, 370, anchor="nw",
+                                                window=pre, width=200,
+                                                height=34), "ar")
+        self.app.var_prefix.trace_add("write", lambda *_: self._invalidate())
+
         # Tasima varsayilan: kaynakta yalnizca islenmemisler kalsin diye.
         self.var_move = tk.BooleanVar(value=True)
-        self._toggle(rx, 300, "Move originals out of the folder",
+        self._toggle(rx, 442, "Move originals out of the folder",
                      self.var_move, self._paint_move)
         self._move_id = self.app._tag(
-            self._text(rx, 338, "", theme.tkfont(9), theme.SLATE,
+            self._text(rx, 480, "", theme.tkfont(9), theme.SLATE,
                        width=rw), "ar")
         self._paint_move()
 
@@ -215,6 +243,10 @@ class ClusterTab:
         self._invalidate()
         self._paint_mode()
 
+    def _on_seg_flip(self):
+        self._invalidate()
+        self._paint_mode()
+
     def _paint_move(self):
         if self.var_move.get():
             msg = ("Matched files go to the Recycle Bin once their copies are "
@@ -224,7 +256,13 @@ class ClusterTab:
         self.canvas.itemconfig(self._move_id, text=msg)
 
     def _paint_mode(self):
-        if self.var_ocr.get():
+        # Sayfanin tek canli cumlesi: ne bulunacagini belirleyen sey bu.
+        # Kod segmenti kipi acikken OCR toleransinin hukmu yok -- metne hic
+        # bakilmiyor -- bu yuzden onu once soyluyoruz.
+        if self.var_seg.get():
+            msg = ("Names are matched against the document code, split on "
+                   "dashes -- not against the page text.")
+        elif self.var_ocr.get():
             msg = "Spaces and letter case are ignored while matching."
         else:
             msg = "Names must match exactly, including spaces and case."
@@ -233,7 +271,7 @@ class ClusterTab:
     def _build_actions(self):
         # Eylemler saga yaslanir: solda liste, sagda klasorler ve eylemler.
         # Boylece satir iki kenardan da baglanir, ortada bosluk kalmaz.
-        y = 392
+        y = 540
         x = self.cr - (150 + 14 + 150)
         for name, label, kind, w, cmd in [
                 ("preview", "Preview", "ghost", 150, self.on_preview),
@@ -250,18 +288,18 @@ class ClusterTab:
         self.progress = ttk.Progressbar(
             self.root, style="Frost.Horizontal.TProgressbar", mode="determinate")
         self.app._tag(self.canvas.create_window(
-            self.cl, 448, anchor="nw", window=self.progress,
+            self.cl, 596, anchor="nw", window=self.progress,
             width=self.cr - self.cl, height=8), "sw")
 
     def _build_results(self):
-        self._text(self.cl, 466, "RESULTS", theme.tkfont(9, "bold"), theme.SLATE)
+        self._text(self.cl, 614, "RESULTS", theme.tkfont(9, "bold"), theme.SLATE)
         export = self.app._tag(self.canvas.create_image(
-            self.cr, 458, anchor="ne",
+            self.cr, 606, anchor="ne",
             image=self.app._mk(theme.button_image(110, 28, "Export", "soft"))),
             "ar")
         self.canvas.tag_bind(export, "<Button-1>", lambda _e: self.on_export())
         self.app._cursor(export)
-        top = 486
+        top = 634
         full = self.cr - self.cl
         cols = ("file", "groups", "status", "msg")
         heads = ("File", "Copied into", "Status", "Detail")
@@ -394,12 +432,21 @@ class ClusterTab:
             phrases=self.phrases(),
             use_ocr=self.var_ocr.get(),
             move_originals=self.var_move.get(),
+            # Kod segmenti kipi ve onek: ikisi birlikte anlamli. Onek Rename
+            # sekmesiyle ayni degiskenden gelir, boylece iki sekme ayni belge
+            # kodunu okur.
+            match_code_segments=self.var_seg.get(),
+            prefix=self.app.var_prefix.get(),
             all_pages=True,
             dry_run=dry_run,
         )
 
     def _sig(self, s: Settings):
-        return (s.effective_folder(), tuple(s.phrases), s.use_ocr, s.all_pages)
+        # Onbellek anahtari: bunlardan biri degisirse plan yeniden kurulmali.
+        # Kip ve onek de buraya girmeli, yoksa kullanici anahtari cevirdiginde
+        # ekranda eski sonuclar kalir.
+        return (s.effective_folder(), tuple(s.phrases), s.use_ocr, s.all_pages,
+                s.match_code_segments, s.prefix)
 
     def _invalidate(self):
         self._cached_plan = None

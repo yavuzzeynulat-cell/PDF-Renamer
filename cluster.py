@@ -62,6 +62,28 @@ class ClusterSummary:
 ProgressCallback = Callable[[int, int, ClusterResult], None]
 
 
+def _match(text, settings: Settings) -> list:
+    """Bu metinde hangi kume adlari geciyor? Kipi KULLANICI secer.
+
+    match_code_segments=True : yalnizca BELGE KODUNA bakilir ve terim tam
+        segment(ler) olarak aranir. Belge numarasinin bir bolumune gore
+        gruplamak icin -- "ID" yazinca sayfada gecen "VALID"e takilmadan
+        yalnizca kodunda ID segmenti olanlar toplanir. Hangi kodun
+        okunacagini onek belirler (Settings.build_pattern()), yani yeniden
+        adlandirma ile ayni ayar: RIA'dan LAB'a gecmek icin onegi degistirmek
+        yeter.
+
+    False (varsayilan): tumce sayfa metninde aranir; toleransi OCR dugmesi
+        belirler (bkz. grouper.py).
+    """
+    if settings.match_code_segments:
+        return grouper.find_code_segments(text, settings.phrases,
+                                          settings.build_pattern(),
+                                          ignore_case=settings.ignore_case)
+    return grouper.find_groups(text, settings.phrases,
+                               tolerant=settings.use_ocr)
+
+
 def cluster_one(pdf_path: str, settings: Settings,
                 group_overrides: Optional[dict] = None) -> ClusterResult:
     """Tek bir PDF'i isler: kumeleri bulur ve kopyalarini olusturur.
@@ -84,9 +106,7 @@ def cluster_one(pdf_path: str, settings: Settings,
         except Exception as exc:  # bozuk / okunamayan PDF
             return ClusterResult(name, [], "error",
                                  f"Could not read file: {exc}", pdf_path)
-        # Toleransi OCR dugmesi belirler (bkz. grouper.py).
-        groups = grouper.find_groups(text, settings.phrases,
-                                     tolerant=settings.use_ocr)
+        groups = _match(text, settings)
 
     if not groups:
         return ClusterResult(name, [], "no_match",
