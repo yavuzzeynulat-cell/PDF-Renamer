@@ -403,16 +403,33 @@ def _import_license_client():
 
 
 def gate_present() -> bool:
-    """Bu EXE lisans kapisiyla mi derlenmis?
+    """Bu EXE'de lisans kapisi GERCEKTEN etkin mi?
 
-    license_client SADECE kapili EXE'lerin icine gomulur; src.zip ile
-    dagitilmaz. Bu yuzden import edilebiliyorsa kapi vardir.
+    Eskiden yalnizca `import license_client` deneniyordu; gerekce
+    "license_client SADECE kapili EXE'lerin icine gomulur" idi. Bu
+    YANLISTI: launcher.py onu kosulsuz import ediyor, dolayisiyla
+    PyInstaller HER derlemeye koyuyor. Kosullu olan tek sey
+    license_secret.txt -- PDF-Renamer.spec o yoksa
+
+        [UYARI] license_secret.txt yok - EXE lisans kapisi OLMADAN derlenecek
+
+    basip devam ediyor. Boyle bir EXE'de license_client yine var ama
+    require() ilk satirda `if not is_configured(): return` deyip hicbir
+    sey sormadan donuyor -- yani kapi KAPALI. Eski kontrol bu EXE'ye
+    "kapisi var" diyordu, dolayisiyla decide_update_kind onu 'required'
+    saymiyor ve makine tam kuruluma hic zorlanmiyordu: lisanssiz
+    calismaya sonsuza kadar devam ediyordu.
+
+    Dogru soru "modul var mi" degil, "sir gomulu mu": is_configured().
+    Cevabi alamazsak (eski bir EXE'nin icindeki license_client'ta bu
+    fonksiyon olmayabilir) GUVENLI yone dusuyoruz: kapi yok say, tam
+    kurulum zorla.
     """
     try:
-        _import_license_client()
+        client = _import_license_client()
+        return bool(client.is_configured())
     except Exception:
         return False
-    return True
 
 
 def decide_update_kind(info: "UpdateInfo") -> str:

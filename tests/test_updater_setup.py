@@ -308,15 +308,49 @@ def test_hash_lines_are_hidden_from_the_user():
 # license_client SADECE kapili EXE'lerin icinde bulunur, dolayisiyla import
 # denemesi "bu EXE kapili mi?" sorusunu cevaplar.
 
-def test_the_gate_is_detected_when_the_client_can_be_imported(monkeypatch):
-    monkeypatch.setattr(updater, "_import_license_client", lambda: object())
+class _Client:
+    """Sahte license_client."""
+
+    def __init__(self, configured):
+        self._configured = configured
+
+    def is_configured(self):
+        return self._configured
+
+
+def test_a_bundled_client_without_a_secret_is_NOT_a_gate(monkeypatch):
+    """ESKI VARSAYIM YANLISTI: "license_client sadece kapili EXE'lerin
+    icindedir" deniyordu. launcher.py onu KOSULSUZ import ediyor, yani
+    PyInstaller her derlemeye koyuyor. Kosullu olan tek sey
+    license_secret.txt; o yoksa PDF-Renamer.spec uyari basip devam ediyor
+    ve require() `is_configured()` False oldugu icin hicbir sey sormadan
+    donuyor -- kapi KAPALI. Eski kontrol bu EXE'ye "kapisi var" diyor,
+    dolayisiyla tam kuruluma hic zorlanmiyor ve makine sonsuza kadar
+    lisanssiz calisiyordu."""
+    monkeypatch.setattr(updater, "_import_license_client",
+                        lambda: _Client(configured=False))
+    assert updater.gate_present() is False
+
+
+def test_a_client_with_a_secret_is_a_real_gate(monkeypatch):
+    monkeypatch.setattr(updater, "_import_license_client",
+                        lambda: _Client(configured=True))
     assert updater.gate_present() is True
 
 
-def test_a_missing_client_means_the_exe_has_no_gate(monkeypatch):
-    def boom():
-        raise ImportError("no module named license_client")
-    monkeypatch.setattr(updater, "_import_license_client", boom)
+def test_an_exe_whose_gate_is_off_must_take_the_full_install(monkeypatch):
+    """Kapiyi ancak setup.exe getirebilir: src.zip EXE'nin icine
+    dokunamaz."""
+    monkeypatch.setattr(updater, "_import_license_client",
+                        lambda: _Client(configured=False))
+    assert updater.decide_update_kind(_info(SETUP_SHA)) == "required"
+
+
+def test_an_old_client_that_cannot_be_asked_counts_as_no_gate(monkeypatch):
+    """Yeni updater (src.zip'ten) eski bir EXE'nin icindeki
+    license_client ile karsilasabilir; onda is_configured olmayabilir.
+    Emin olamadigimizda GUVENLI yon: kapi yok say, tam kurulum zorla."""
+    monkeypatch.setattr(updater, "_import_license_client", lambda: object())
     assert updater.gate_present() is False
 
 
