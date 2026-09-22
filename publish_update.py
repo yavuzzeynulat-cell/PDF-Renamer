@@ -52,6 +52,32 @@ def build_notes(zip_sha: str, setup_sha, extra: str) -> str:
     return "\n".join(lines)
 
 
+def check_setup_is_fresh(version: str, dist_dir: str) -> str:
+    """Kurulum dosyasi bu surum icin mi derlenmis? Sorun varsa aciklamasi.
+
+    Kurulum dosyasi `dist/PDF-Renamer/` klasorunden paketlenir, yani icindeki
+    `src/version.txt` setup.exe'nin GERCEKTEN kuracagi surumdur.
+
+    Bu kontrol bir gercek olaydan dogdu: v2.2.8'den v2.3.2'ye kadar her
+    release'e ayni setup.exe yuklendi, cunku aradaki surumler icin
+    Derle-EXE/Derle-Installer tekrar calistirilmamisti. Kullanicinin makinesi
+    110 MB indiriyor, kuruyor, surum yine eski kaliyordu -- disaridan bakinca
+    "guncelleme inmiyor/kurulmuyor" gibi gorunuyor ve hatayi bulmak cok zor.
+    """
+    vfile = os.path.join(dist_dir, "src", "version.txt")
+    if not os.path.isfile(vfile):
+        return ("Kurulum dosyasinin kaynagi yok: %s\n"
+                "Once Derle-EXE.bat, sonra Derle-Installer.bat calistir."
+                % vfile)
+    with open(vfile, "r", encoding="utf-8") as f:
+        built = f.read().strip()
+    if built != version:
+        return ("Kurulum dosyasi BAYAT: icinde %s var, yayinlanan surum %s.\n"
+                "Once Derle-EXE.bat, sonra Derle-Installer.bat calistir."
+                % (built, version))
+    return ""
+
+
 def _run(cmd, cwd):
     print(">", " ".join(cmd))
     return subprocess.run(cmd, cwd=cwd)
@@ -105,6 +131,11 @@ def main() -> int:
         setup_path = sys.argv[sys.argv.index("--setup") + 1]
         if not os.path.isfile(setup_path):
             print(f"[HATA] Kurulum dosyasi yok: {setup_path}")
+            return 1
+        stale = check_setup_is_fresh(version, os.path.join(root, "dist",
+                                                           "PDF-Renamer"))
+        if stale:
+            print("[HATA] " + stale)
             return 1
         hs = hashlib.sha256()
         with open(setup_path, "rb") as f:

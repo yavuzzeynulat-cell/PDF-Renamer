@@ -108,46 +108,152 @@ def test_a_setup_without_a_hash_is_never_downloaded(tmp_path, monkeypatch):
 
 SETUP = r"C:\tmp\setup.exe"
 APP = r"C:\app\PDF-Renamer.exe"
+UNINS = r"C:\Users\x\AppData\Local\Programs\PDF Renamer\unins000.exe"
+
+
+def test_the_command_survives_windows_quoting():
+    r"""ESKI HATA: komut ["cmd", "/c", 'ping ... & "setup.exe" /SILENT & ...']
+    olarak veriliyordu. Python'un list2cmdline'i icerideki tirnaklari \"
+    yapiyor, cmd.exe bunu anlamiyor ve
+
+        '\"C:\tmp\setup.exe\"' is not recognized as an internal command
+
+    deyip cikiyordu. Program coktan kapanmis oldugu icin kullanici yalnizca
+    "indi ama kurulmadi" goruyordu. Artik komut bir .bat dosyasina yazilir ve
+    cmd'ye SADECE dosya yolu verilir; tirnaklar hic yolculuk etmez.
+    """
+    import subprocess
+    cmd = updater.build_install_command(r"C:\tmp\install.bat")
+    line = subprocess.list2cmdline(cmd)
+    assert '\\"' not in line, "kacisli tirnak var: cmd.exe bunu calistiramaz"
+    assert cmd[0] == "cmd"
+    assert cmd[-1].endswith(".bat")
 
 
 def test_the_installer_writes_a_log_we_can_read_afterwards():
     """Kurulum basarisiz olursa program coktan kapanmis oluyor ve geriye
     hicbir iz kalmiyordu. /LOG ile en azindan neden basarisiz oldugu
     diskte kaliyor."""
-    joined = " ".join(updater.build_install_command(SETUP, APP))
-    assert "/LOG=" in joined
-    assert updater.INSTALL_LOG_NAME in joined
+    script = updater.build_install_script(SETUP, APP)
+    assert "/LOG=" in script
+    assert updater.INSTALL_LOG_NAME in script
 
 
 def test_the_installer_shows_its_progress():
     """/VERYSILENT hicbir sey gostermiyordu: program kapaniyor, arkada
     sessizce kuruluyor, kullanici ne oldugunu anlayamiyordu. /SILENT
     ilerleme penceresini gosterir (sihirbaz sayfalari yine yok)."""
-    joined = " ".join(updater.build_install_command(SETUP, APP))
-    assert "/SILENT" in joined
-    assert "/VERYSILENT" not in joined, "sessiz kurulum takip edilemiyor"
-    assert "/NORESTART" in joined
-    assert SETUP in joined
+    script = updater.build_install_script(SETUP, APP)
+    setup_line = [l for l in script.splitlines() if SETUP in l][0]
+    assert "/SILENT" in setup_line
+    assert "/VERYSILENT" not in setup_line, "sessiz kurulum takip edilemiyor"
+    assert "/NORESTART" in setup_line
 
 
 def test_the_installer_is_given_time_to_take_the_file_lock():
-    joined = " ".join(updater.build_install_command(SETUP, APP))
-    assert "ping" in joined, "gecikme yok: calisan exe hala kilitli olabilir"
+    script = updater.build_install_script(SETUP, APP)
+    assert "ping" in script, "gecikme yok: calisan exe hala kilitli olabilir"
 
 
 def test_the_app_comes_back_by_itself_after_the_install():
     """installer.iss'teki [Run] satirinda `skipifsilent` var, yani sessiz
     kurulumda program yeniden ACILMIYOR. Geri getirmeyi biz ustleniyoruz."""
-    joined = " ".join(updater.build_install_command(SETUP, APP))
-    assert APP in joined
-    assert joined.index("setup.exe") < joined.index("PDF-Renamer.exe"), \
+    script = updater.build_install_script(SETUP, APP)
+    assert APP in script
+    assert script.index("setup.exe") < script.index("PDF-Renamer.exe"), \
         "once kurulum bitmeli, sonra program acilmali"
 
 
 def test_without_a_relaunch_path_nothing_extra_is_started():
-    joined = " ".join(updater.build_install_command(SETUP))
-    assert "/SILENT" in joined
-    assert "start" not in joined
+    script = updater.build_install_script(SETUP)
+    assert "/SILENT" in script
+    assert "start" not in script
+
+
+def test_the_script_never_uses_start_wait():
+    """OLCULDU: betik gizli konsollu bir cmd'de calisiyor ve orada
+    `start /wait` DONMUYOR. Kaldirma yapiliyor, sonraki satir hic
+    calismiyor -- yani kurulum sessizce hic baslamiyor. Kaldirici
+    dogrudan cagrilmali."""
+    script = updater.build_install_script(SETUP, APP, UNINS)
+    assert "start /wait" not in script
+
+
+def test_the_installer_process_keeps_a_console_it_can_use():
+    """DETACHED_PROCESS konsolu tamamen kaldiriyor ve `start` orada
+    asili kaliyor; programi geri acan satir `start` kullaniyor.
+    CREATE_NO_WINDOW gizli ama GERCEK bir konsol verir."""
+    import subprocess
+    flags = updater.spawn_flags()
+    assert flags & subprocess.CREATE_NO_WINDOW
+    assert not (flags & subprocess.DETACHED_PROCESS), \
+        "konsolsuz surecte `start` donmuyor"
+
+
+def test_the_installer_outlives_the_app_that_started_it():
+    """Program os._exit(0) ile aninda oluyor. Cocuk surec ona bagli
+    kalirsa bazi ortamlarda onunla birlikte olur."""
+    import subprocess
+    flags = updater.spawn_flags()
+    assert flags & subprocess.CREATE_BREAKAWAY_FROM_JOB
+    assert flags & subprocess.CREATE_NEW_PROCESS_GROUP
+
+
+def test_the_script_is_written_where_the_uninstall_cannot_reach_it():
+    """Kaldirma adimi kurulum klasorunu siliyor; betik orada dursa
+    kendi altindan cekilmis olurdu."""
+    import tempfile
+    path = updater.write_install_script("@echo off\n")
+    assert os.path.dirname(path) == tempfile.gettempdir()
+    assert path.endswith(".bat")
+
+
+# -- eski surumu once kaldirma ----------------------------------------------
+
+def test_the_old_version_is_removed_before_the_new_one_is_installed():
+    """Ustune kurmak eski src/ artiklarini birakiyordu. Once kaldir."""
+    script = updater.build_install_script(SETUP, APP, UNINS)
+    assert UNINS in script
+    assert script.index("unins000.exe") < script.index("setup.exe"), \
+        "kaldirma kurulumdan ONCE olmali"
+
+
+def test_the_uninstall_asks_nothing_and_restarts_nothing():
+    script = updater.build_install_script(SETUP, APP, UNINS)
+    unins_line = [l for l in script.splitlines()
+                  if "unins000.exe" in l and "/VERYSILENT" in l][0]
+    assert "/VERYSILENT" in unins_line, "kaldirma penceresi kullaniciyi sasirtir"
+    assert "/SUPPRESSMSGBOXES" in unins_line, "onay kutusu tum akisi kilitler"
+    assert "/NORESTART" in unins_line
+
+
+def test_a_first_time_install_just_installs():
+    """Kaldirilacak bir sey yoksa (ilk kurulum) akis durmamali."""
+    script = updater.build_install_script(SETUP, APP, "")
+    assert "unins" not in script
+    assert SETUP in script
+    assert APP in script
+
+
+def test_the_install_still_runs_if_the_uninstall_hangs():
+    """Kaldirma takilirsa kurulum yine de denenmeli; Inno ustune kurabilir."""
+    script = updater.build_install_script(SETUP, APP, UNINS)
+    assert "goto" in script.lower(), "bekleme dongusunden cikis yok"
+    assert script.index(SETUP) > script.index(UNINS)
+
+
+def test_the_uninstaller_is_found_from_the_registry(monkeypatch):
+    """Kaldiriciyi kayit defterinden buluruz; kurulum klasoru tasinmis
+    olabilir, sabit yol yazmak kirilgan."""
+    monkeypatch.setattr(updater, "_read_registry_value",
+                        lambda root, key, name: '"%s" /SILENT' % UNINS)
+    assert updater.find_uninstaller() == UNINS
+
+
+def test_no_uninstaller_means_no_uninstall_step(monkeypatch):
+    monkeypatch.setattr(updater, "_read_registry_value",
+                        lambda root, key, name: None)
+    assert updater.find_uninstaller() == ""
 
 
 # -- hangi yol secilir -------------------------------------------------------

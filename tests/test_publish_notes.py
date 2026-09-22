@@ -29,3 +29,30 @@ def test_notes_carry_both_hashes_without_confusing_them():
     assert updater._parse_sha256(notes) == ZIP
     assert updater._parse_setup_sha256(notes) == SETUP
     assert "Kumeleme eklendi" in notes
+
+
+# -- bayat kurulum dosyasi ---------------------------------------------------
+
+def test_a_stale_setup_is_refused(tmp_path):
+    """GERCEK OLAY: v2.2.8'den v2.3.2'ye kadar her release'e AYNI setup.exe
+    yuklendi -- Derle-EXE + Derle-Installer tekrar calistirilmadigi icin
+    icinde hala 2.2.7 vardi. Kullanicinin makinesi 110 MB indirip kuruyor,
+    surum degismiyor, guncelleme "hic olmamis" gibi gorunuyordu. Yuklemeden
+    ONCE yakalanmali."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "version.txt").write_text("2.2.7")
+    problem = publish_update.check_setup_is_fresh("2.3.3", str(tmp_path))
+    assert problem
+    assert "2.2.7" in problem and "2.3.3" in problem
+
+
+def test_a_freshly_built_setup_passes(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "version.txt").write_text("2.3.3")
+    assert publish_update.check_setup_is_fresh("2.3.3", str(tmp_path)) == ""
+
+
+def test_a_missing_build_is_refused(tmp_path):
+    """dist/ hic yoksa yuklenecek setup baska bir derlemeden kalmadir."""
+    problem = publish_update.check_setup_is_fresh("2.3.3", str(tmp_path))
+    assert problem

@@ -497,32 +497,130 @@ def download_setup(info: "UpdateInfo", dest_path: str, timeout: int = 300,
     return True
 
 
-def build_install_command(setup_path: str, relaunch_path: str = "") -> list:
-    """Kurulumu baslatan komut (saf - test edilir).
+# --- eski surumu bulma ------------------------------------------------------
+# Inno Setup kurulumu kendini buraya yazar. AppId installer.iss'te
+# "PDF Renamer" ve Inno sonuna "_is1" ekler; gorunen ad degisse bile bu
+# anahtar sabit kalir.
+UNINSTALL_KEY = (r"Software\Microsoft\Windows\CurrentVersion\Uninstall"
+                 r"\PDF Renamer_is1")
 
-    Uc ayri sorunu birlikte cozuyor:
 
-    1. Gecikme. Calisan surec tkinter icin tcl/tk DLL'lerini yuklu tutuyor.
-       Hemen baslatilan Inno Setup, DLL henuz serbest kalmadigi icin
-       "DeleteFile failed; code 5" veriyor (EDMS_RIA_Print'te gercek
-       kurulumda goruldu). `timeout` degil `ping`: konsolsuz (pythonw)
-       sureclerde `timeout` "Input redirection is not supported" deyip
-       hemen cikiyor.
+def _read_registry_value(root, key: str, name: str) -> Optional[str]:
+    """Tek bir kayit defteri degeri okur. Yoksa/okunamazsa None."""
+    try:
+        import winreg
+    except ImportError:
+        return None
+    try:
+        with winreg.OpenKey(root, key) as k:
+            value, _ = winreg.QueryValueEx(k, name)
+        return value if isinstance(value, str) else None
+    except OSError:
+        return None
 
-    2. Gorunurluk. Eskiden /VERYSILENT kullaniliyordu: program kapaniyor,
-       arkada hicbir sey gostermeden kuruluyordu ve kullanici ne oldugunu
-       anlayamiyordu. /SILENT ilerleme penceresini gosterir.
 
-    3. Geri donus. installer.iss'teki [Run] satiri `skipifsilent` tasiyor,
-       yani sessiz kurulumdan sonra programi ACMAZ. cmd komutlari `&` ile
-       SIRAYLA calistigi icin kurulum bitince programi biz aciyoruz.
+def find_uninstaller() -> str:
+    r"""Kurulu surumun unins000.exe yolu; kurulu degilse "" .
+
+    Kurulum kullanici bazinda (HKCU) yapiliyor ama eski/admin kurulumlar
+    HKLM'de olabilir; ikisine de bakariz. Deger '"...\unins000.exe" /SILENT'
+    seklinde geldigi icin ilk tirnakli parca ayiklanir.
     """
-    parts = ['ping 127.0.0.1 -n 3 >nul',
-             '"' + setup_path + '" /SILENT /NORESTART /LOG="'
-             + install_log_path() + '"']
+    try:
+        import winreg
+    except ImportError:
+        return ""
+    roots = [getattr(winreg, "HKEY_CURRENT_USER"),
+             getattr(winreg, "HKEY_LOCAL_MACHINE")]
+    for root in roots:
+        raw = _read_registry_value(root, UNINSTALL_KEY, "UninstallString")
+        if not raw:
+            continue
+        path = raw.strip()
+        if path.startswith('"'):
+            path = path[1:].split('"', 1)[0]
+        else:
+            path = path.split(" ")[0]
+        # Dosya var mi diye BURADA bakmiyoruz: betikteki `if not exist`
+        # korumasi bunu zaten yapiyor ve kayit defteri okumasini tek
+        # sorumluluga indirgemek fonksiyonu test edilebilir birakiyor.
+        if path:
+            return path
+    return ""
+
+
+def build_install_script(setup_path: str, relaunch_path: str = "",
+                         uninstaller: str = "") -> str:
+    r"""Kurulumu yapan .bat dosyasinin icerigi (saf - test edilir).
+
+    Neden .bat? Eskiden komut tek satir halinde
+    `subprocess.Popen(["cmd", "/c", '... & "setup.exe" /SILENT & ...'])`
+    olarak veriliyordu. Python'un list2cmdline'i o satirdaki tirnaklari
+    \\" diye kacirir, cmd.exe ise \\" bilmez; sonuc:
+
+        '\\"C:\...\PDF-Renamer-Setup.exe\\"' is not recognized as an
+        internal or external command
+
+    Program o anda coktan kapanmis oldugu icin geriye hicbir iz kalmiyor,
+    kullanici sadece "guncelleme indi ama kurulmadi" goruyordu. Komutu
+    dosyaya yazip cmd'ye yalnizca DOSYA YOLUNU vermek bu sinifi tamamen
+    ortadan kaldirir.
+
+    Akis:
+      1. ping ile gecikme -- calisan surec tkinter'in tcl/tk DLL'lerini
+         birakana kadar Inno "DeleteFile failed; code 5" veriyor.
+         `timeout` degil `ping`: konsolsuz sureclerde timeout
+         "Input redirection is not supported" deyip hemen cikar.
+      2. Varsa eski surumu sessizce kaldir ve gercekten bitmesini bekle.
+         Inno kaldiriciyi %TEMP%'e kopyalayip oradan calistirdigi icin
+         cagri hemen doner; unins000.exe kaybolana kadar yoklariz.
+         Ilk kez kuruluyorsa bu adim hic yazilmaz.
+      3. /SILENT ile kur (/VERYSILENT degil: kullanici ilerlemeyi gormeli)
+         ve /LOG birak -- basarisiz kurulumdan geriye kalan tek sey.
+      4. Programi geri ac. installer.iss'teki [Run] satirinda `skipifsilent`
+         var, yani sessiz kurulumdan sonra Inno programi ACMAZ.
+    """
+    lines = ["@echo off", "ping 127.0.0.1 -n 3 >nul"]
+    if uninstaller:
+        # Kaldirici DOGRUDAN cagrilir, `start /wait` ile degil. Betik gizli
+        # konsollu bir cmd'de calisiyor ve olculdu: `start /wait` orada
+        # donmuyor -- kaldirma yapiliyor ama betik o satirda sonsuza kadar
+        # asili kaliyor, kurulum hic baslamiyor.
+        lines += [
+            'if not exist "%s" goto install' % uninstaller,
+            '"%s" /VERYSILENT /NORESTART /SUPPRESSMSGBOXES' % uninstaller,
+            'for /L %%i in (1,1,60) do (',
+            '  if not exist "%s" goto install' % uninstaller,
+            '  ping 127.0.0.1 -n 2 >nul',
+            ')',
+            ':install',
+        ]
+    lines.append('"%s" /SILENT /NORESTART /LOG="%s"'
+                 % (setup_path, install_log_path()))
     if relaunch_path:
-        parts.append('start "" "' + relaunch_path + '"')
-    return ["cmd", "/c", " & ".join(parts)]
+        lines.append('start "" "%s"' % relaunch_path)
+    return "\n".join(lines) + "\n"
+
+
+def write_install_script(text: str) -> str:
+    """Betigi diske yazar ve yolunu doner.
+
+    Kurulum klasorunun degil %TEMP%'in altinda durur: kaldirma adimi
+    kurulum klasorunu silecegi icin betik kendi altindan cekilmis olurdu.
+    """
+    path = os.path.join(tempfile.gettempdir(), "PDF-Renamer_install.bat")
+    with open(path, "w", encoding="ascii", errors="replace", newline="\r\n") as f:
+        f.write(text)
+    return path
+
+
+def build_install_command(script_path: str) -> list:
+    """Betigi calistiran komut (saf - test edilir).
+
+    cmd'ye giden tek argüman bir dosya yolu: icinde tirnak yok, dolayisiyla
+    list2cmdline kacisli tirnak uretemez.
+    """
+    return ["cmd", "/c", script_path]
 
 
 def install_log_path() -> str:
@@ -537,6 +635,28 @@ def install_log_path() -> str:
     return os.path.join(folder, INSTALL_LOG_NAME)
 
 
+# Kurulum betigini baslatirken kullanilan surec bayraklari.
+#
+# CREATE_NO_WINDOW: betige GIZLI bir konsol verir. DETACHED_PROCESS
+#   denendi ve olculdu -- orada konsol HIC olmadigi icin `start` komutu
+#   donmuyor, betik o satirda sonsuza kadar asili kaliyor. Programi
+#   kurulumdan sonra geri acan satir `start` kullaniyor.
+# CREATE_BREAKAWAY_FROM_JOB / CREATE_NEW_PROCESS_GROUP: ana program
+#   hemen os._exit(0) yapiyor; cocuk ondan bagimsiz olmazsa bazi
+#   ortamlarda (is nesnesine bagli oturumlarda) onunla birlikte oluyor
+#   ve kurulum hic calismamis gibi gorunuyor.
+_SPAWN_FLAG_NAMES = ("CREATE_NO_WINDOW", "CREATE_NEW_PROCESS_GROUP",
+                     "CREATE_BREAKAWAY_FROM_JOB")
+
+
+def spawn_flags() -> int:
+    """Kurulum betiginin surec bayraklari (saf - test edilir)."""
+    flags = 0
+    for name in _SPAWN_FLAG_NAMES:
+        flags |= getattr(subprocess, name, 0)
+    return flags
+
+
 def install_setup(setup_path: str):
     """Kurulumu baslatir ve programdan hemen cikar.
 
@@ -544,19 +664,15 @@ def install_setup(setup_path: str):
     os._exit(): Tcl/Tk kapanis temizligi gecikebiliyor; bu, sureci ve DLL
     kilitlerini aninda birakir.
     """
-    # Ana program hemen cikiyor. Cocuk surec ondan BAGIMSIZ baslamali,
-    # yoksa bazi ortamlarda (is nesnesine bagli oturumlarda) ebeveynle
-    # birlikte oluyor ve kurulum hic calismamis gibi gorunuyor.
     kwargs = {"close_fds": True}
-    flags = 0
-    for name in ("DETACHED_PROCESS", "CREATE_NEW_PROCESS_GROUP",
-                 "CREATE_BREAKAWAY_FROM_JOB"):
-        flags |= getattr(subprocess, name, 0)
+    flags = spawn_flags()
     if flags:
         kwargs["creationflags"] = flags
     # Kurulum bitince geri acilacak program: donmus halde kendi exe'miz.
     relaunch = sys.executable if getattr(sys, "frozen", False) else ""
-    subprocess.Popen(build_install_command(setup_path, relaunch), **kwargs)
+    script = write_install_script(
+        build_install_script(setup_path, relaunch, find_uninstaller()))
+    subprocess.Popen(build_install_command(script), **kwargs)
     os._exit(0)
 
 
