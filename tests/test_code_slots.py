@@ -120,3 +120,47 @@ def test_a_shorter_filter_still_checks_its_own_slots():
     """Filtre 5 yer sayiyorsa 6. yere bakmaz."""
     text = "26437-RIA-04C-DR-ID-00022"
     assert grouper.match_code_slots(text, ["", "", "", "", "ID"], RIA) == "ID"
+
+
+# -- yeri fark etmesin -------------------------------------------------------
+#
+# Yer sabit degil: ayni projede 26437-RIA-04C-DR-ID-00022 (ID 5. yerde) ve
+# 26437-RIA-04C-DR-PR2-ID-00003 (ID 6. yerde) birlikte bulunuyor. Kutu
+# numarasina bagli kalmak bu yuzden kirilgan; kullanicinin en bastan beri
+# sordugu sey de "kodunda ID gecenleri grupla" idi.
+
+def anywhere(values, text=TEXT, pattern=RIA):
+    return grouper.match_code_anywhere(text, values, pattern)
+
+
+def test_a_value_is_found_wherever_it_sits():
+    assert anywhere(["ID"]) == "ID"
+    assert anywhere(["ID"], text="26437-RIA-04C-DR-PR2-ID-00003") == "ID"
+
+
+def test_several_values_must_all_be_present():
+    assert anywhere(["DR", "ID"]) == "DR-ID"
+    assert anywhere(["DR", "ID"], text="26437-RIA-04C-CA-SP-00470") == ""
+
+
+def test_order_does_not_matter_here():
+    """Yer onemsizse sira da onemsiz."""
+    assert anywhere(["ID", "DR"]) == "ID-DR"
+
+
+def test_a_partial_word_still_does_not_match():
+    assert anywhere(["I"]) == ""
+    assert anywhere(["VALID"]) == ""
+
+
+def test_letter_case_is_ignored_too():
+    assert anywhere(["id"]) == "id"
+
+
+def test_nothing_to_look_for_matches_nothing():
+    assert anywhere([]) == ""
+    assert anywhere(["", "  "]) == ""
+
+
+def test_no_code_means_no_match():
+    assert anywhere(["ID"], text="Kodsuz sayfa") == ""

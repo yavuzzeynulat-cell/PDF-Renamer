@@ -349,8 +349,8 @@ class ClusterTab:
             self.var_src.set(folder)
         saved = self.app._prefs.get("cluster_code_filters", [])
         if isinstance(saved, list):
-            self.code_filters = [list(f) for f in saved
-                                 if isinstance(f, list)]
+            self.code_filters = [f for f in saved
+                                 if isinstance(f, (list, dict))]
         self._paint_filters()
         self._paint_count()
 
@@ -359,8 +359,9 @@ class ClusterTab:
         self.app._prefs["cluster_folder"] = self.var_src.get().strip()
         # Kod filtreleri de kalici: kullanici her acilista pencereyi
         # yeniden kurmak zorunda kalmasin.
-        self.app._prefs["cluster_code_filters"] = [list(f)
-                                                   for f in self.code_filters]
+        self.app._prefs["cluster_code_filters"] = [
+            dict(f) if isinstance(f, dict) else list(f)
+            for f in self.code_filters]
         self.app.save_prefs()
 
     def phrases(self) -> list:
@@ -458,7 +459,8 @@ class ClusterTab:
             # Kod segmenti kipi ve onek: ikisi birlikte anlamli. Onek Rename
             # sekmesiyle ayni degiskenden gelir, boylece iki sekme ayni belge
             # kodunu okur.
-            code_filters=[list(f) for f in self.code_filters],
+            code_filters=[dict(f) if isinstance(f, dict) else list(f)
+                          for f in self.code_filters],
             prefix=self.app.var_prefix.get(),
             all_pages=True,
             dry_run=dry_run,
@@ -469,7 +471,7 @@ class ClusterTab:
         # Kip ve onek de buraya girmeli, yoksa kullanici anahtari cevirdiginde
         # ekranda eski sonuclar kalir.
         return (s.effective_folder(), tuple(s.phrases), s.use_ocr, s.all_pages,
-                tuple(tuple(f) for f in s.code_filters), s.prefix)
+                repr(s.code_filters), s.prefix)
 
     def _invalidate(self):
         self._cached_plan = None

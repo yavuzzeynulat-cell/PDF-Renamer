@@ -118,3 +118,56 @@ def match_code_slots(text: str | None, slots, pattern: str,
             return ""
 
     return "-".join(want for _, want in filled)
+
+
+def match_code_anywhere(text: str | None, values, pattern: str,
+                        *, ignore_case: bool = True) -> str:
+    """Verilen degerlerin HEPSI kodda geciyorsa klasor adini doner.
+
+    Yer onemsizdir. Gerekcesi: ayni projede
+    26437-RIA-04C-DR-ID-00022 (ID 5. yerde) ve
+    26437-RIA-04C-DR-PR2-ID-00003 (ID 6. yerde) birlikte bulunuyor -- kutu
+    numarasina bagli kalmak bu belgelerin yarisini kaciriyordu.
+
+    Tam SEGMENT aranir: "VALID" icindeki ID sayilmaz.
+    """
+    if not text or not values:
+        return ""
+
+    wanted = [str(v).strip() for v in values if v is not None and str(v).strip()]
+    if not wanted:
+        return ""
+
+    try:
+        code = code_finder.find_code(text, pattern, ignore_case=ignore_case)
+    except ValueError:
+        return ""
+    if not code:
+        return ""
+
+    have = _segments(code)
+    if ignore_case:
+        have = [s.casefold() for s in have]
+        need = [s.casefold() for s in wanted]
+    else:
+        need = wanted
+
+    if all(s in have for s in need):
+        return "-".join(wanted)
+    return ""
+
+
+def slots_of(f) -> list:
+    """Bir filtrenin kutu degerleri.
+
+    Filtre iki bicimde olabilir: duz liste (yer bazli, eski kayitlar) ya da
+    {"slots": [...], "anywhere": bool}. Ikisi de okunur.
+    """
+    if isinstance(f, dict):
+        return list(f.get("slots") or [])
+    return list(f or [])
+
+
+def is_anywhere(f) -> bool:
+    """Bu filtre yerden bagimsiz mi aransin?"""
+    return bool(isinstance(f, dict) and f.get("anywhere"))

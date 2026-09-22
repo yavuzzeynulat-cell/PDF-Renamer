@@ -79,9 +79,15 @@ def _match(text, settings: Settings) -> list:
                                 tolerant=settings.use_ocr)
     if settings.code_filters:
         pattern = settings.build_pattern()
-        for slots in settings.code_filters:
-            name = grouper.match_code_slots(text, slots, pattern,
-                                            ignore_case=settings.ignore_case)
+        for f in settings.code_filters:
+            slots = grouper.slots_of(f)
+            if grouper.is_anywhere(f):
+                # Yer onemsiz: ID kimi belgede 5., kimindeyse 6. parcada.
+                finder = grouper.match_code_anywhere
+            else:
+                finder = grouper.match_code_slots
+            name = finder(text, slots, pattern,
+                          ignore_case=settings.ignore_case)
             if name and name not in found:
                 found.append(name)
     return found

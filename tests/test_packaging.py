@@ -23,14 +23,15 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # src/'ye GIRMEYEN, kok dizinde yasayan dosyalar:
 #   launcher.py       EXE'nin kendisi, src/'den yuklenmez
 #   publish_update.py yalnizca gelistirici araci
+#   kod_teshis.py     yalnizca teshis araci; uygulama onu import etmez
 #   v1_original.py    tarihsel yedek, uygulama onu import etmez
 #   license_client.py lisans kapisi. BILEREK src/ disinda: launcher.py onu
 #                     import ettigi icin EXE'ye gomulur. src/ dosyalari
 #                     exe'nin yaninda DUZ METIN durur; SECRET oraya konursa
 #                     Not Defteri ile okunur. Ayrica kapinin kendisi,
 #                     kapinin denetledigi guncelleme kanaliyla degismemeli.
-NOT_SHIPPED = {"launcher.py", "publish_update.py", "v1_original.py",
-               "license_client.py"}
+NOT_SHIPPED = {"launcher.py", "publish_update.py", "kod_teshis.py",
+               "v1_original.py", "license_client.py"}
 
 
 def _app_modules() -> set:

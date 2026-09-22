@@ -22,6 +22,7 @@ from __future__ import annotations
 import re
 
 import config
+import grouper
 
 # Tire varyantlari (en-dash vb.) normal tire gibi ayirir; bazi PDF'ler
 # kodlarda bunlari kullaniyor ve kullanici oradan kopyalayip yapistirabilir.
@@ -37,21 +38,26 @@ def hints_from_sample(sample) -> list:
     return [p for p in _SPLIT.split(str(sample).strip()) if p]
 
 
-def filter_label(slots) -> str:
+slots_of = grouper.slots_of
+is_anywhere = grouper.is_anywhere
+
+
+def filter_label(f) -> str:
     """Filtrenin adi = dolu kutularin tire ile birlesimi ("DR-ID")."""
+    slots = slots_of(f)
     if not slots:
         return ""
     return "-".join(str(v).strip() for v in slots
                     if v is not None and str(v).strip())
 
 
-def is_usable(slots) -> bool:
+def is_usable(f) -> bool:
     """En az bir kutusu dolu mu?
 
     Hepsi bos bir filtre HER dosyaya eslesirdi; sessizce butun klasoru
     toplamasin diye eklenmesine izin verilmez.
     """
-    return bool(filter_label(slots))
+    return bool(filter_label(f))
 
 
 def has_work(phrases, filters) -> bool:
@@ -90,7 +96,8 @@ def open_dialog(parent, prefix: str, filters, sample: str = ""):
     from tkinter import ttk
     import theme
 
-    current = [list(f) for f in (filters or [])]
+    current = [dict(f) if isinstance(f, dict) else list(f)
+               for f in (filters or [])]
     result = {"value": None}
 
     win = tk.Toplevel(parent)
@@ -164,16 +171,20 @@ def open_dialog(parent, prefix: str, filters, sample: str = ""):
     def refresh_list():
         listbox.delete(0, "end")
         for f in current:
-            listbox.insert("end", filter_label(f))
+            listbox.insert("end", filter_label(f)
+                           + ("   · anywhere" if is_anywhere(f) else ""))
 
     def on_add():
         slots = [v.get().strip() for v in slot_vars]
         if not is_usable(slots):
             status.config(text="Fill at least one box first.")
             return
-        current.append(slots)
+        item = ({"slots": slots, "anywhere": True} if var_any.get()
+                else slots)
+        current.append(item)
         refresh_list()
-        status.config(text="Added: " + filter_label(slots))
+        status.config(text="Added: " + filter_label(item)
+                      + (" (anywhere)" if var_any.get() else ""))
         for v in slot_vars:
             v.set("")
 
@@ -185,8 +196,19 @@ def open_dialog(parent, prefix: str, filters, sample: str = ""):
         refresh_list()
         status.config(text="")
 
+    # Yer sabit degil: ayni projede ID kimi belgede 5., kimindeyse 6.
+    # parcada duruyor. Kutu numarasina bagli kalmak o belgelerin yarisini
+    # kaciriyordu, bu yuzden yerden bagimsiz arama secenegi var.
+    var_any = tk.BooleanVar(value=False)
+    tk.Checkbutton(win, variable=var_any, bg="#F4F9FF", fg=theme.INK,
+                   activebackground="#F4F9FF", selectcolor="white",
+                   font=theme.tkfont(10), anchor="w",
+                   text="Position does not matter "
+                        "(find these anywhere in the code)").pack(
+        fill="x", pady=(14, 0), **pad)
+
     row = tk.Frame(win, bg="#F4F9FF")
-    row.pack(fill="x", pady=(14, 4), **pad)
+    row.pack(fill="x", pady=(8, 4), **pad)
     ttk.Button(row, text="Add filter", command=on_add).pack(side="left")
     ttk.Button(row, text="Remove selected",
                command=on_remove).pack(side="left", padx=8)
@@ -198,7 +220,8 @@ def open_dialog(parent, prefix: str, filters, sample: str = ""):
     refresh_list()
 
     def on_ok():
-        result["value"] = [list(f) for f in current]
+        result["value"] = [dict(f) if isinstance(f, dict) else list(f)
+                           for f in current]
         win.destroy()
 
     def on_cancel():
