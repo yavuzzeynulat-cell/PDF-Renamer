@@ -29,6 +29,7 @@ except (AttributeError, OSError):
 import code_finder
 import core
 import extractor
+import grouper
 from config import Settings
 
 
@@ -39,6 +40,11 @@ def main() -> int:
 
     folder = sys.argv[1].strip('"').strip()
     prefix = sys.argv[2].strip() if len(sys.argv) > 2 else "26437-RIA-"
+    # Ucuncu arguman: virgulle ayrilmis kume adlari. Verilirse her ad icin
+    # BIREBIR ve TOLERANSLI (OCR kipi) eslesme ayri ayri sayilir -- "bir
+    # suru vardi ama birkacini buldu" dendiginde farki bu gosterir.
+    phrases = [x.strip() for x in sys.argv[3].split(",")] if len(sys.argv) > 3 else []
+    phrases = [x for x in phrases if x]
 
     if not os.path.isdir(folder):
         print("[HATA] Klasor yok:", folder)
@@ -58,6 +64,8 @@ def main() -> int:
 
     found = 0
     sizes = {}
+    exact = {p: 0 for p in phrases}
+    loose = {p: 0 for p in phrases}
     for path in pdfs:
         name = os.path.basename(path)
         try:
@@ -67,6 +75,11 @@ def main() -> int:
             continue
 
         chars = len(text or "")
+        for ph in phrases:
+            if grouper.find_groups(text, [ph], tolerant=False):
+                exact[ph] += 1
+            if grouper.find_groups(text, [ph], tolerant=True):
+                loose[ph] += 1
         code = code_finder.find_code(text, pattern, ignore_case=True)
         if not code:
             if chars == 0:
@@ -94,6 +107,15 @@ def main() -> int:
         if len(sizes) > 1:
             print("[!] Parca sayisi DEGISIYOR. Kutu numaralari her belgede")
             print("    ayni seyi gostermez; filtreyi buna gore kur.")
+    if phrases:
+        print()
+        print("%-32s %-10s %s" % ("KUME ADI", "birebir", "toleransli (OCR)"))
+        for ph in phrases:
+            print("%-32s %-10d %d" % (ph[:32], exact[ph], loose[ph]))
+        if any(loose[p] > exact[p] for p in phrases):
+            print("[!] Toleransli sayi daha yuksek: adlar metinde satir sonu")
+            print("    ya da farkli bosluklarla geciyor. OCR dugmesini acmak")
+            print("    eslestirmeyi bosluk/harf duyarsiz yapar.")
     if found == 0:
         print("[!] Hicbir kod bulunamadi. Onek yanlis olabilir: yukaridaki")
         print("    'ilk satirlar' ciktisina bakip numaranin gercek basini yaz.")

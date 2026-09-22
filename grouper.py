@@ -81,6 +81,29 @@ def _segments(code: str) -> list[str]:
 # yaparsam eslesmeli" deyince dogru modelin bu oldugu anlasildi.
 # ---------------------------------------------------------------------------
 
+def _codes_in(text, pattern: str, ignore_case: bool) -> list:
+    """Metindeki tum kodlar. Bozuk desen kumelemeyi cokturmez."""
+    try:
+        return code_finder.find_all_codes(text, pattern,
+                                          ignore_case=ignore_case)
+    except ValueError:
+        return []
+
+
+def _slots_fit(parts, filled, ignore_case: bool) -> bool:
+    """Dolu kutularin hepsi bu kodda kendi yerinde tutuyor mu?"""
+    for index, want in filled:
+        if index >= len(parts):
+            return False   # filtre kodun sonunu asiyor
+        have = parts[index]
+        if ignore_case:
+            if have.casefold() != want.casefold():
+                return False
+        elif have != want:
+            return False
+    return True
+
+
 def match_code_slots(text: str | None, slots, pattern: str,
                      *, ignore_case: bool = True) -> str:
     """Dolu kutularin hepsi kendi yerinde tutuyorsa klasor adini doner.
@@ -99,25 +122,15 @@ def match_code_slots(text: str | None, slots, pattern: str,
     if not filled:
         return ""
 
-    try:
-        code = code_finder.find_code(text, pattern, ignore_case=ignore_case)
-    except ValueError:
-        return ""          # bozuk desen: kumeleme cokmesin
-    if not code:
-        return ""
-
-    parts = _segments(code)
-    for index, want in filled:
-        if index >= len(parts):
-            return ""      # filtre kodun sonunu asiyor
-        have = parts[index]
-        if ignore_case:
-            if have.casefold() != want.casefold():
-                return ""
-        elif have != want:
-            return ""
-
-    return "-".join(want for _, want in filled)
+    # Belgedeki TUM kodlara bakilir: bir belge kendi numarasinin yaninda
+    # atif verdigi baskalarini da tasiyabilir ve aranan parca onlardan
+    # birinde olabilir. Bir filtre TEK bir kodda tutmali -- yoksa
+    # aralarinda iliski olmayan iki numarayi birlestirmis oluruz.
+    for code in _codes_in(text, pattern, ignore_case):
+        parts = _segments(code)
+        if _slots_fit(parts, filled, ignore_case):
+            return "-".join(want for _, want in filled)
+    return ""
 
 
 def match_code_anywhere(text: str | None, values, pattern: str,
@@ -138,22 +151,13 @@ def match_code_anywhere(text: str | None, values, pattern: str,
     if not wanted:
         return ""
 
-    try:
-        code = code_finder.find_code(text, pattern, ignore_case=ignore_case)
-    except ValueError:
-        return ""
-    if not code:
-        return ""
-
-    have = _segments(code)
-    if ignore_case:
-        have = [s.casefold() for s in have]
-        need = [s.casefold() for s in wanted]
-    else:
-        need = wanted
-
-    if all(s in have for s in need):
-        return "-".join(wanted)
+    need = [s.casefold() for s in wanted] if ignore_case else list(wanted)
+    for code in _codes_in(text, pattern, ignore_case):
+        have = _segments(code)
+        if ignore_case:
+            have = [s.casefold() for s in have]
+        if all(s in have for s in need):
+            return "-".join(wanted)
     return ""
 
 

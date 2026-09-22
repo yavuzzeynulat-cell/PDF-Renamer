@@ -53,3 +53,34 @@ def find_code(
 def clean_filename(name: str) -> str:
     """Remove characters illegal in Windows filenames and trim whitespace."""
     return _ILLEGAL_FILENAME_CHARS.sub("", str(name)).strip()
+
+
+def find_all_codes(
+    text: str, pattern: str = DEFAULT_PATTERN, *, ignore_case: bool = False
+) -> list:
+    """Metindeki TUM kod eslesmelerini, belgedeki siralariyla dondurur.
+
+    `find_code` yalnizca ilkini verir ve yeniden adlandirma icin dogrusu
+    odur: dosyaya tek bir ad verilir. Kumeleme icin degil -- bir belge
+    kendi numarasinin yaninda atif verdigi baska numaralari da tasiyabilir
+    ve aranan parca onlardan birinde olabilir.
+
+    Ayni kod birkac kez geciyorsa bir kez dondurulur.
+    """
+    if not text:
+        return []
+
+    flags = re.IGNORECASE if ignore_case else 0
+    try:
+        matches = re.findall(pattern, str(text), flags)
+    except re.error as exc:
+        raise ValueError(f"Invalid regex pattern {pattern!r}: {exc}") from exc
+
+    out = []
+    seen = set()
+    for raw in matches:
+        code = _DASH_VARIANTS.sub("-", raw).rstrip("- \t\r\n")
+        if code and code not in seen:
+            seen.add(code)
+            out.append(code)
+    return out

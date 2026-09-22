@@ -19,7 +19,9 @@ if "%KLASOR%"=="" (
 set /p ONEK="Code prefix (Enter = 26437-RIA-): "
 if "%ONEK%"=="" set ONEK=26437-RIA-
 
+set /p ADLAR="Kume adlari (virgulle, Enter = atla): "
+
 echo.
-python kod_teshis.py "%KLASOR%" "%ONEK%"
+python kod_teshis.py "%KLASOR%" "%ONEK%" "%ADLAR%"
 echo.
 pause

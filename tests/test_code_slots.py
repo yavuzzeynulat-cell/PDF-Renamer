@@ -164,3 +164,35 @@ def test_nothing_to_look_for_matches_nothing():
 
 def test_no_code_means_no_match():
     assert anywhere(["ID"], text="Kodsuz sayfa") == ""
+
+
+# -- belgede birden fazla kod ------------------------------------------------
+#
+# Bir belge birkac RIA numarasi tasiyabiliyor (kendi numarasi + atif verdigi
+# baskalari). Eskiden yalnizca ILK kod okunuyordu: aranan parca ikinci
+# koddaysa dosya hic bulunamiyordu.
+
+MULTI = ("Kapak\n26437-RIA-04C-DR-PR2-SP-00003\n"
+         "Atif: 26437-RIA-11A-CA-ID-00471\nson")
+
+
+def test_a_later_code_is_read_too():
+    assert grouper.match_code_anywhere(MULTI, ["ID"], RIA) == "ID"
+
+
+def test_a_later_code_works_for_slots_as_well():
+    assert grouper.match_code_slots(MULTI, ["", "", "", "", "ID", ""], RIA) == "ID"
+
+
+def test_the_first_code_still_matches():
+    assert grouper.match_code_anywhere(MULTI, ["SP"], RIA) == "SP"
+
+
+def test_one_filter_may_not_span_two_codes():
+    """SP 1. kodda, ID 2. kodda. Bir filtre TEK kodda tutmali; yoksa
+    aralarinda hicbir iliski olmayan iki numarayi birlestirmis oluruz."""
+    assert grouper.match_code_anywhere(MULTI, ["SP", "ID"], RIA) == ""
+
+
+def test_still_nothing_when_no_code_matches():
+    assert grouper.match_code_anywhere(MULTI, ["ZZZ"], RIA) == ""
