@@ -76,3 +76,21 @@ def test_launcher_reloads_every_app_module():
     assert not missing, (
         "launcher.py _APP_MODULES eksik: " + ", ".join(missing)
         + " -- guncelleme sonrasi eski modul bellekte kalabilir.")
+
+
+# ---------------------------------------------------------------------------
+# Onek kalici olmali
+#
+# GERCEK HATA: kullanici Code prefix'i 26437-RIA- yapiyor, programi
+# kapatiyor, tekrar aciyor ve deger 26437-LAB-'a donmus oluyordu. Kod
+# filtresi o zaman LAB kodunu okuyor, onda ID gecmedigi icin "hicbir sey
+# bulamiyor". Bulmasi imkansiz bir ayari her acilista sifirlamak, hatayi
+# da gorunmez kiliyordu.
+# ---------------------------------------------------------------------------
+
+def test_the_code_prefix_is_saved_and_restored():
+    gui = _read("gui.py")
+    assert '_prefs["prefix"]' in gui, \
+        "onek prefs'e yazilmiyor: her acilista varsayilana doner"
+    assert '_prefs.get("prefix"' in gui, \
+        "onek prefs'ten okunmuyor: kaydedilse bile geri gelmez"

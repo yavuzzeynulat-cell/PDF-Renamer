@@ -417,10 +417,18 @@ class App:
         self.canvas.tag_bind(bid, "<Button-1>", lambda e: self.on_browse())
         self._cursor(bid)
 
-        self.var_prefix = tk.StringVar(value=DEFAULT_PREFIX)
-        self.var_suffix = tk.StringVar(value="")
+        # Onek KALICI olmali. Eskiden her acilista DEFAULT_PREFIX'e
+        # doniyordu: kullanici 26437-RIA- yaziyor, programi kapatiyor,
+        # geri aciyor ve deger yine 26437-LAB- oluyordu. Kod filtresi o
+        # zaman LAB kodunu okuyor, onda aranan parca gecmedigi icin
+        # "hicbir sey bulamiyor" -- sebebi de gorunmuyordu.
+        self.var_prefix = tk.StringVar(
+            value=self._prefs.get("prefix") or DEFAULT_PREFIX)
+        self.var_suffix = tk.StringVar(value=self._prefs.get("suffix", ""))
         self.var_prefix.trace_add("write", lambda *_: self._update_example())
         self.var_suffix.trace_add("write", lambda *_: self._update_example())
+        self.var_prefix.trace_add("write", lambda *_: self._remember_prefix())
+        self.var_suffix.trace_add("write", lambda *_: self._remember_prefix())
 
         e2 = tk.Entry(self.root, textvariable=self.var_prefix, **kw)
         self.canvas.create_window(self.cl, 184, anchor="nw", window=e2,
@@ -660,6 +668,12 @@ class App:
         if folder and os.path.isdir(folder):
             self._prefs["folder"] = folder
             _save_prefs(self._prefs)
+
+    def _remember_prefix(self):
+        """Onek ve soneki kalici kaydet."""
+        self._prefs["prefix"] = self.var_prefix.get()
+        self._prefs["suffix"] = self.var_suffix.get()
+        _save_prefs(self._prefs)
 
     def _settings(self, dry_run):
         return Settings(
