@@ -50,19 +50,21 @@ class Settings:
     # hangileri geciyorsa, dosya o adli klasorlere KOPYALANIR; dosya adi
     # degismez ve orijinal yerinde kalir.
     phrases: list = field(default_factory=list)
-    # Kume adlari metnin tamaminda mi, yoksa yalnizca BELGE KODUNUN
-    # segmentleri icinde mi aransin?
+    # Kod filtreleri: belge kodunu tire tire, YER bazli eslestirir.
     #
-    # False (varsayilan, eski davranis): tumce sayfa metninde aranir.
-    # True: once kod bulunur (ornek 26437-RIA-04C-DR-ID-00022), tirelerden
-    #       bolunur ve terim tam segment(ler) olarak aranir. Belge
-    #       numarasinin bir bolumune gore gruplamak icin -- "ID" yazinca
-    #       sayfada gecen "VALID", "GRID" gibi kelimelere takilmadan
-    #       yalnizca kodunda ID segmenti olan belgeler toplanir.
+    # Her filtre bir kutu listesidir; BOS kutu jokerdir:
     #
+    #     26437 - RIA - 04C - DR - ID - 00022
+    #       1      2     3     4    5     6
+    #
+    #     ["", "", "", "", "ID", ""]  ->  "5. yerde ID olsun, gerisi fark
+    #                                      etmez" ; klasor adi "ID"
+    #
+    # `phrases` ile AYNI calistirmada, yan yana calisirlar ve birbirlerine
+    # karismazlar: phrases sayfa METNINDE, code_filters belge KODUNDA arar.
     # Hangi kodun okunacagini `prefix` belirler (26437-RIA- bugun,
     # 26437-LAB- yarin); yeniden adlandirma ile ayni ayar.
-    match_code_segments: bool = False
+    code_filters: list = field(default_factory=list)
     # Kume klasorlerinin acilacagi ust klasor. BOS birakilirsa her dosya
     # kendi klasorunun icinde kumelenir -- arayuzde tek klasor secilir ve
     # kumeler onun icinde acilir, kokte kalanlar "islenmemisler" olur.

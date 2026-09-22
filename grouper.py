@@ -56,15 +56,6 @@ def find_groups(text: str | None, phrases, *, tolerant: bool = False) -> list[st
     return found
 
 
-# ---------------------------------------------------------------------------
-# Kod segmentiyle eslestirme
-#
-# find_groups tumceyi METNIN tamaminda arar. Belge numarasinin bir bolumunu
-# aramak icin bu yetersiz: "ID" yazinca "VALID", "GRID", "IDENTIFICATION"
-# gibi kelimelere de takilir. Asagidaki kip yalnizca BELGE KODUNA bakar ve
-# terimi tam segment(ler) olarak arar.
-# ---------------------------------------------------------------------------
-
 def _segments(code: str) -> list[str]:
     """Kodu tirelerden boler; bos parcalari atar.
 
@@ -74,61 +65,56 @@ def _segments(code: str) -> list[str]:
     return [part for part in code.split("-") if part]
 
 
-def _contains_run(haystack: list[str], needle: list[str]) -> bool:
-    """`needle`, `haystack` icinde ARDISIK ve SIRALI bir dizi mi?
+# ---------------------------------------------------------------------------
+# Kod filtresi: tire tire, YER bazli eslestirme
+#
+# Kullanicinin modeli: RIA numarasi sabit sayida "bilgi yeri"nden olusur ve
+# o yalnizca birini umursar, gerisi degisken.
+#
+#     26437 - RIA - 04C - DR - ID - 00022
+#       1      2     3     4    5     6
+#
+# "5. yerde ID olsun, gerisi fark etmez" = yalnizca o kutuyu doldur.
+#
+# Bir onceki deneme (find_code_segments) terimi kodun HERHANGI bir yerinde
+# ariyordu ve yer bilgisini tasimiyordu; kullanici "tireler arasini edit
+# yaparsam eslesmeli" deyince dogru modelin bu oldugu anlasildi.
+# ---------------------------------------------------------------------------
 
-    Ardisiklik sart: "RIA-ID" istendiginde 26437-RIA-04C-DR-ID-00022
-    eslesmemeli, cunku aradaki 04C-DR atlanmis olur -- kullanici oyle bir
-    bolum yazmadi.
+def match_code_slots(text: str | None, slots, pattern: str,
+                     *, ignore_case: bool = True) -> str:
+    """Dolu kutularin hepsi kendi yerinde tutuyorsa klasor adini doner.
+
+    `slots` kutu degerleridir; BOS kutu jokerdir. Hicbiri dolu degilse ""
+    doner -- bos bir filtre her dosyaya eslesmemeli.
+
+    Klasor adi, dolu kutularin tire ile birlestirilmis halidir
+    (ornek: 4. ve 5. kutu dolu -> "DR-ID").
     """
-    if not needle or len(needle) > len(haystack):
-        return False
-    last = len(haystack) - len(needle)
-    return any(haystack[i:i + len(needle)] == needle
-               for i in range(last + 1))
+    if not text or not slots:
+        return ""
 
-
-def find_code_segments(text: str | None, terms, pattern: str,
-                       *, ignore_case: bool = True) -> list[str]:
-    """Belge kodunun segmentleri icinde gecen terimleri dondurur.
-
-    `pattern` disaridan gelir: kod numaralari degisir (26437-RIA- bugun,
-    26437-LAB- yarin) ve deseni kullanicinin yazdigi onekten kuran yer
-    Settings.build_pattern(). Burasi yalnizca eslestirmeyi bilir.
-
-    Metinde birden fazla kod varsa ILKI kullanilir -- yeniden adlandirma da
-    ilk kodu kullaniyor, dosyanin adi ile girdigi klasor boylece ayni koddan
-    gelir.
-
-    Donen adlar KULLANICININ yazdigi haliyle gelir (klasor adi olacaklar) ve
-    sira `terms` listesindeki siradir; boylece cikti tahmin edilebilir kalir.
-    """
-    if not text or not terms:
-        return []
+    filled = [(i, str(v).strip()) for i, v in enumerate(slots)
+              if v is not None and str(v).strip()]
+    if not filled:
+        return ""
 
     try:
         code = code_finder.find_code(text, pattern, ignore_case=ignore_case)
     except ValueError:
-        return []          # bozuk desen: kumeleme cokmesin
+        return ""          # bozuk desen: kumeleme cokmesin
     if not code:
-        return []
+        return ""
 
-    have = _segments(code)
-    if ignore_case:
-        have = [s.casefold() for s in have]
-
-    found: list[str] = []
-    seen: set[str] = set()
-
-    for raw in terms:
-        term = str(raw).strip() if raw else ""
-        if not term or term in seen:
-            continue        # bos satirlar her dosyaya eslesmemeli
-        want = _segments(term)
+    parts = _segments(code)
+    for index, want in filled:
+        if index >= len(parts):
+            return ""      # filtre kodun sonunu asiyor
+        have = parts[index]
         if ignore_case:
-            want = [s.casefold() for s in want]
-        if _contains_run(have, want):
-            seen.add(term)
-            found.append(term)
+            if have.casefold() != want.casefold():
+                return ""
+        elif have != want:
+            return ""
 
-    return found
+    return "-".join(want for _, want in filled)

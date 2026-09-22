@@ -26,11 +26,13 @@ copy /Y config.py      "%SRCDIR%\" >nul
 copy /Y theme.py       "%SRCDIR%\" >nul
 copy /Y cli.py         "%SRCDIR%\" >nul
 copy /Y updater.py     "%SRCDIR%\" >nul
-copy /Y dnd.py         "%SRCDIR%\" >nul
+copy /Y dnd.py         "%SRCDIR%\" >nul
+
 copy /Y grouper.py     "%SRCDIR%\" >nul
 copy /Y cluster.py     "%SRCDIR%\" >nul
 copy /Y cluster_tab.py "%SRCDIR%\" >nul
 copy /Y guide_tab.py   "%SRCDIR%\" >nul
+copy /Y code_filter_dialog.py "%SRCDIR%\" >nul
 copy /Y exporter.py    "%SRCDIR%\" >nul
 copy /Y version.txt    "%SRCDIR%\" >nul
 

@@ -56,32 +56,39 @@ Taranmış PDF'leri okuyup iki iş yapar:
 |---------|----------|
 | 🗂️ **Kümeleme (Cluster)** | Başlığın altındaki **Cluster** sekmesi. Yazdığın *küme adlarını* PDF'lerin içinde arar ve her dosyayı, içinde geçen **her** küme adının klasörüne **kopyalar**. Liste, çalıştırdıktan sonra her kümeye kaç dosya düştüğünü gösterir. |
 
-**İki eşleştirme kipi var, seçimi sen yaparsın**
+**İki bağımsız yol, aynı çalıştırmada**
 
-| Kip | Ne yapar |
-|-----|----------|
-| *Varsayılan* | Yazdığın tümceyi **sayfa metninde** arar. `B0051 Bridge` gibi adlar için doğru olan bu. |
-| **Match code segments** | Yalnızca **belge koduna** bakar. Kod tirelerden bölünür ve terimin **ardışık segment dizisi** olarak geçip geçmediğine bakılır. |
+| Nerede | Ne arar |
+|--------|---------|
+| **Group names** listesi | Yazdığın tümceyi **sayfa metninde** arar (`B0051 Bridge`). |
+| **Code filter** penceresi | Belge **kodunu** tire tire, **yer bazlı** eşleştirir. |
 
-Segment kipi, belge numarasının bir bölümüne göre gruplamak için:
-`26437-RIA-04C-DR-ID-00022` kodu `26437 · RIA · 04C · DR · ID · 00022`
-parçalarına ayrılır.
+İkisi birbirine karışmaz ve ayrı yerden yönetilir.
 
-| Yazdığın | Sonuç | Neden |
-|----------|-------|-------|
-| `ID` | ✅ | tek segment olarak var |
-| `04C-DR-ID` | ✅ | üçü ardışık ve sıralı |
-| `DR-ID` | ✅ | ikisi yan yana |
-| `RIA-ID` | ❌ | ardışık değil, arada `04C-DR` var |
-| `ID-DR` | ❌ | sıra ters |
-| `VALID` | ❌ | tam segment değil — segmentin içine bakılmaz |
+**Code filter nasıl çalışır**
 
-Sayfada geçen `VALID`, `GRID`, `IDENTIFICATION` gibi kelimeler bu kipte
-dosyayı içeri çekmez; düz metin aramasının asıl sorunu buydu.
+Düğmeye basınca pencere açılır. Gerçek bir numara yapıştırırsın, kutular
+onun tirelerine göre açılır — altı parçaysa altı, yediyse yedi:
+
+```
+26437 - RIA - 04C - DR - ID - 00022
+  1      2     3     4    5     6
+```
+
+Umursadığın yeri doldurur, gerisini boş bırakırsın. **Boş kutu = fark etmez.**
+
+| Doldurduğun | Sonuç |
+|-------------|-------|
+| 5. kutuya `ID` | Kodunun 5. yerinde `ID` olan her belge → `ID\` |
+| 4. `DR` + 5. `ID` | İkisi birden tutanlar → `DR-ID\` |
+| 5. kutuya `VALID` | Hiçbiri — sayfada geçse bile koda bakılır |
+
+Dolu kutuların **hepsi** kendi yerinde tutmalı. Hiçbiri dolu değilse filtre
+eklenmez; boş bir filtre bütün klasörü toplardı.
 
 Hangi kodun okunacağını **Code prefix** belirler (`26437-RIA-` bugün,
-`26437-LAB-` yarın). Bu kutu, Rename sekmesindeki önek alanının **aynısıdır**:
-birinden değiştirince diğeri de değişir, iki ayrı yerde tutulmaz.
+`26437-LAB-` yarın). Bu kutu, Rename sekmesindeki önek alanının
+**aynısıdır**: birinden değiştirince diğeri de değişir.
 
 **Kümeleme neyi yapar, neyi yapmaz**
 

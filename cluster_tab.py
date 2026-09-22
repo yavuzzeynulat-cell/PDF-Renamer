@@ -20,6 +20,7 @@ from tkinter import ttk, filedialog, messagebox
 
 import theme
 import cluster
+import code_filter_dialog
 import exporter
 from config import Settings
 
@@ -170,40 +171,44 @@ class ClusterTab:
                                  "Group folders are created inside this folder.",
                                  theme.tkfont(9), theme.MUTED, width=rw), "ar")
 
-        # Iki anahtar birlikte eslestirme kipini belirler; _paint_mode
-        # ikisini de okudugu icin ikisi de ondan ONCE var olmali.
+        # OCR dugmesi ayni zamanda METIN eslestirmesinin toleransini belirler.
         self.var_ocr = tk.BooleanVar(value=False)
-        self.var_seg = tk.BooleanVar(value=False)
         self._toggle(rx, 214, "OCR (scanned PDFs)", self.var_ocr,
                      self._on_ocr_flip)
-
-        # Kod segmenti kipi. Adi metnin tamaminda degil, BELGE KODUNUN
-        # tirelerden bolunmus parcalarinda arar: "ID" yazinca sayfada gecen
-        # "VALID", "GRID" gibi kelimelere takilmaz, yalnizca kodunda ID
-        # segmenti olan belgeler toplanir.
-        self._toggle(rx, 252, "Match code segments", self.var_seg,
-                     self._on_seg_flip)
-
-        # Sayfanin tek canli cumlesi: ne bulacagini belirleyen sey bu. Iki
-        # anahtari birden anlattigi icin ikisinin de ALTINDA duruyor -- yukari
-        # koyulunca yalnizca OCR'i acikliyormus gibi okunuyordu.
         self._mode_id = self.app._tag(
-            self._text(rx, 292, "", theme.tkfont(11), theme.ACCENT_HEX,
+            self._text(rx, 252, "", theme.tkfont(11), theme.ACCENT_HEX,
                        width=rw), "ar")
         self._paint_mode()
+
+        # Kod filtresi AYRI bir is: soldaki liste sayfa METNINDE arar, bu ise
+        # belge KODUNDA yer bazli. Tek listede karistirilinca kullanici
+        # hangisinin ne yaptigini takip edemiyordu, bu yuzden kendi
+        # penceresinde duruyor -- dugmeye basinca acilir.
+        self.code_filters: list = []
+        btn = self.app._tag(self.canvas.create_image(
+            rx, 292, anchor="nw",
+            image=self.app._mk(theme.button_image(190, 38, "Code filter…",
+                                                  "soft"))), "ar")
+        self.canvas.tag_bind(btn, "<Button-1>",
+                             lambda _e: self.on_code_filter())
+        self.app._cursor(btn)
+        self._filter_id = self.app._tag(
+            self._text(rx, 338, "", theme.tkfont(9), theme.SLATE,
+                       width=rw), "ar")
+        self._paint_filters()
 
         # Hangi kodun okunacagini belirleyen onek. Rename sekmesindeki
         # alanla AYNI degiskendir: kod numaralari degisir (26437-RIA- bugun,
         # 26437-LAB- yarin) ve iki yerde ayri ayri tutulursa kacinilmaz
         # olarak birbirinden kayar.
-        self.app._tag(self._text(rx, 352, "CODE PREFIX",
+        self.app._tag(self._text(rx, 372, "CODE PREFIX",
                                  theme.tkfont(9, "bold"), theme.SLATE), "ar")
-        self.app._tag(self._text(self.cr, 352, "same as Rename tab",
+        self.app._tag(self._text(self.cr, 372, "same as Rename tab",
                                  theme.tkfont(9), theme.MUTED,
                                  anchor="ne"), "ar")
         pre = tk.Entry(self.root, textvariable=self.app.var_prefix,
                        **self._entry_kw())
-        self.app._tag(self.canvas.create_window(rx, 370, anchor="nw",
+        self.app._tag(self.canvas.create_window(rx, 390, anchor="nw",
                                                 window=pre, width=200,
                                                 height=34), "ar")
         self.app.var_prefix.trace_add("write", lambda *_: self._invalidate())
@@ -243,9 +248,22 @@ class ClusterTab:
         self._invalidate()
         self._paint_mode()
 
-    def _on_seg_flip(self):
+    def _paint_filters(self):
+        """Kod filtrelerinin tek satirlik ozeti."""
+        self.canvas.itemconfig(self._filter_id,
+                               text=code_filter_dialog.summary(self.code_filters))
+
+    def on_code_filter(self):
+        """Kod filtresi penceresini acar."""
+        if self._running:
+            return
+        got = code_filter_dialog.open_dialog(
+            self.root, self.app.var_prefix.get(), self.code_filters)
+        if got is None:
+            return                      # Cancel: hicbir sey degismesin
+        self.code_filters = got
+        self._paint_filters()
         self._invalidate()
-        self._paint_mode()
 
     def _paint_move(self):
         if self.var_move.get():
@@ -256,13 +274,9 @@ class ClusterTab:
         self.canvas.itemconfig(self._move_id, text=msg)
 
     def _paint_mode(self):
-        # Sayfanin tek canli cumlesi: ne bulunacagini belirleyen sey bu.
-        # Kod segmenti kipi acikken OCR toleransinin hukmu yok -- metne hic
-        # bakilmiyor -- bu yuzden onu once soyluyoruz.
-        if self.var_seg.get():
-            msg = ("Names are matched against the document code, split on "
-                   "dashes -- not against the page text.")
-        elif self.var_ocr.get():
+        # Bu cumle YALNIZCA soldaki metin listesini anlatir; kod filtresi
+        # metne hic bakmadigi icin ondan etkilenmez.
+        if self.var_ocr.get():
             msg = "Spaces and letter case are ignored while matching."
         else:
             msg = "Names must match exactly, including spaces and case."
@@ -435,7 +449,7 @@ class ClusterTab:
             # Kod segmenti kipi ve onek: ikisi birlikte anlamli. Onek Rename
             # sekmesiyle ayni degiskenden gelir, boylece iki sekme ayni belge
             # kodunu okur.
-            match_code_segments=self.var_seg.get(),
+            code_filters=[list(f) for f in self.code_filters],
             prefix=self.app.var_prefix.get(),
             all_pages=True,
             dry_run=dry_run,
@@ -446,7 +460,7 @@ class ClusterTab:
         # Kip ve onek de buraya girmeli, yoksa kullanici anahtari cevirdiginde
         # ekranda eski sonuclar kalir.
         return (s.effective_folder(), tuple(s.phrases), s.use_ocr, s.all_pages,
-                s.match_code_segments, s.prefix)
+                tuple(tuple(f) for f in s.code_filters), s.prefix)
 
     def _invalidate(self):
         self._cached_plan = None

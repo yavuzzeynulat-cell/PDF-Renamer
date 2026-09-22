@@ -47,6 +47,7 @@ import license_client
 _APP_MODULES = ("main", "gui", "core", "extractor", "code_finder",
                 "renamer", "config", "theme", "cli", "updater", "dnd",
                 "grouper", "cluster", "cluster_tab", "guide_tab",
+                "code_filter_dialog",
                 "exporter")
 
 
