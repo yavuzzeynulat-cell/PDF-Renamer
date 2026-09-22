@@ -72,8 +72,19 @@ def has_work(phrases, filters) -> bool:
     return any(is_usable(f) for f in (filters or []))
 
 
-def summary(filters) -> str:
+def active_filters(filters, enabled) -> list:
+    """Su an gecerli olan filtreler.
+
+    Kapaliyken bos liste doner ama KAYNAK LISTEYE DOKUNMAZ: kapatmak
+    silmek degildir, birkac kutulu bir filtreyi yeniden kurmak gereksiz is.
+    """
+    return list(filters or []) if enabled else []
+
+
+def summary(filters, enabled: bool = True) -> str:
     """Ana sekmede gorunen tek satirlik ozet."""
+    if not enabled:
+        return "Code filter: off"
     names = [filter_label(f) for f in (filters or []) if is_usable(f)]
     if not names:
         return "No code filter."

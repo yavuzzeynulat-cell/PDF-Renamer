@@ -120,3 +120,37 @@ def test_an_empty_filter_does_not_count_as_work():
 
 def test_blank_names_do_not_count():
     assert dlg.has_work(["", "   "], []) is False
+
+
+# -- acma/kapama -------------------------------------------------------------
+#
+# Filtreleri silmeden beklemeye almak icin. Silip yeniden kurmak, birkac
+# kutulu bir filtre icin gereksiz is.
+
+def test_filters_are_ignored_while_switched_off():
+    saved = [["", "", "", "", "ID", ""]]
+    assert dlg.active_filters(saved, False) == []
+
+
+def test_filters_are_used_while_switched_on():
+    saved = [["", "", "", "", "ID", ""]]
+    assert dlg.active_filters(saved, True) == saved
+
+
+def test_switching_off_does_not_discard_them():
+    """Kapatmak silmek degil: liste oldugu gibi durur."""
+    saved = [["", "ID"]]
+    dlg.active_filters(saved, False)
+    assert saved == [["", "ID"]]
+
+
+def test_a_switched_off_filter_is_not_work_to_do():
+    assert dlg.has_work([], dlg.active_filters([["", "ID"]], False)) is False
+
+
+def test_the_summary_says_when_it_is_off():
+    assert dlg.summary([["", "ID"]], enabled=False) == "Code filter: off"
+
+
+def test_the_summary_still_names_them_when_on():
+    assert "ID" in dlg.summary([["", "ID"]], enabled=True)

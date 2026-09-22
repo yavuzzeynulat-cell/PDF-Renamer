@@ -185,6 +185,12 @@ class ClusterTab:
         # hangisinin ne yaptigini takip edemiyordu, bu yuzden kendi
         # penceresinde duruyor -- dugmeye basinca acilir.
         self.code_filters: list = []
+        # Acma/kapama: filtreler silinmeden beklemeye alinabilsin. Birkac
+        # kutulu bir filtreyi silip yeniden kurmak gereksiz is.
+        self.var_filters_on = tk.BooleanVar(value=True)
+        self._filters_tog = self._toggle(rx + 206, 296, "Use it",
+                                         self.var_filters_on,
+                                         self._on_filters_flip)
         btn = self.app._tag(self.canvas.create_image(
             rx, 292, anchor="nw",
             image=self.app._mk(theme.button_image(190, 38, "Code filter…",
@@ -250,8 +256,14 @@ class ClusterTab:
 
     def _paint_filters(self):
         """Kod filtrelerinin tek satirlik ozeti."""
-        self.canvas.itemconfig(self._filter_id,
-                               text=code_filter_dialog.summary(self.code_filters))
+        self.canvas.itemconfig(
+            self._filter_id,
+            text=code_filter_dialog.summary(self.code_filters,
+                                            self.var_filters_on.get()))
+
+    def _on_filters_flip(self):
+        self._invalidate()
+        self._paint_filters()
 
     def on_code_filter(self):
         """Kod filtresi penceresini acar."""
@@ -351,6 +363,15 @@ class ClusterTab:
         if isinstance(saved, list):
             self.code_filters = [f for f in saved
                                  if isinstance(f, (list, dict))]
+        self.var_filters_on.set(
+            bool(self.app._prefs.get("cluster_filters_on", True)))
+        # _toggle resmi yalnizca kurulumda ve tiklamada ayarliyor; degisken
+        # programdan set edilince resim eski kalir ve kapali anahtar acik
+        # gorunurdu.
+        self.canvas.itemconfig(
+            self._filters_tog,
+            image=self.app.tog_on if self.var_filters_on.get()
+            else self.app.tog_off)
         self._paint_filters()
         self._paint_count()
 
@@ -362,6 +383,7 @@ class ClusterTab:
         self.app._prefs["cluster_code_filters"] = [
             dict(f) if isinstance(f, dict) else list(f)
             for f in self.code_filters]
+        self.app._prefs["cluster_filters_on"] = bool(self.var_filters_on.get())
         self.app.save_prefs()
 
     def phrases(self) -> list:
@@ -460,7 +482,8 @@ class ClusterTab:
             # sekmesiyle ayni degiskenden gelir, boylece iki sekme ayni belge
             # kodunu okur.
             code_filters=[dict(f) if isinstance(f, dict) else list(f)
-                          for f in self.code_filters],
+                          for f in code_filter_dialog.active_filters(
+                              self.code_filters, self.var_filters_on.get())],
             prefix=self.app.var_prefix.get(),
             all_pages=True,
             dry_run=dry_run,
