@@ -54,6 +54,18 @@ def is_usable(slots) -> bool:
     return bool(filter_label(slots))
 
 
+def has_work(phrases, filters) -> bool:
+    """Calistirmak icin elimizde bir sey var mi?
+
+    Ikisinden BIRI yeter. Kontrol eskiden yalnizca metin listesine bakiyordu
+    ve kod filtresi ekleyen kullaniciya "Add at least one group name" deyip
+    yolu kesiyordu -- ozellik vardi ama onunden gecilemiyordu.
+    """
+    if any(str(p).strip() for p in (phrases or []) if p):
+        return True
+    return any(is_usable(f) for f in (filters or []))
+
+
 def summary(filters) -> str:
     """Ana sekmede gorunen tek satirlik ozet."""
     names = [filter_label(f) for f in (filters or []) if is_usable(f)]

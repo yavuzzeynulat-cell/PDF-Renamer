@@ -347,11 +347,20 @@ class ClusterTab:
                   or self.app._prefs.get("folder", ""))
         if folder and os.path.isdir(folder):
             self.var_src.set(folder)
+        saved = self.app._prefs.get("cluster_code_filters", [])
+        if isinstance(saved, list):
+            self.code_filters = [list(f) for f in saved
+                                 if isinstance(f, list)]
+        self._paint_filters()
         self._paint_count()
 
     def _remember(self):
         self.app._prefs["cluster_phrases"] = self.phrases()
         self.app._prefs["cluster_folder"] = self.var_src.get().strip()
+        # Kod filtreleri de kalici: kullanici her acilista pencereyi
+        # yeniden kurmak zorunda kalmasin.
+        self.app._prefs["cluster_code_filters"] = [list(f)
+                                                   for f in self.code_filters]
         self.app.save_prefs()
 
     def phrases(self) -> list:
@@ -491,9 +500,11 @@ class ClusterTab:
             messagebox.showerror("Cluster", "Choose a folder that exists.",
                                  parent=self.root)
             return
-        if not self.phrases():
-            messagebox.showerror("Cluster", "Add at least one group name.",
-                                 parent=self.root)
+        if not code_filter_dialog.has_work(self.phrases(), self.code_filters):
+            messagebox.showerror(
+                "Cluster",
+                "Add a group name, or set up a code filter.",
+                parent=self.root)
             return
 
         settings = self._settings(dry_run)

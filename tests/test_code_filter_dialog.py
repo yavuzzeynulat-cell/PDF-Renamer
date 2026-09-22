@@ -89,3 +89,34 @@ def test_an_all_empty_filter_is_rejected():
 
 def test_a_filter_with_one_box_is_usable():
     assert dlg.is_usable(["", "", "ID"]) is True
+
+
+# -- calisacak bir sey var mi --------------------------------------------
+
+def test_a_code_filter_alone_is_enough_to_run():
+    """GERCEK HATA: kullanici 2. yere RIA, 5. yere ID yazip filtreyi
+    ekledi; program yine "Add at least one group name" deyip calismayi
+    reddetti. Kontrol yalnizca metin listesine bakiyordu, kod filtrelerini
+    hic saymiyordu -- yani ozellik eklendi ama onunden gecilemiyordu."""
+    assert dlg.has_work([], [["", "RIA", "", "", "ID", ""]]) is True
+
+
+def test_a_text_name_alone_is_enough():
+    assert dlg.has_work(["B0051 Bridge"], []) is True
+
+
+def test_both_together_are_fine():
+    assert dlg.has_work(["B0051 Bridge"], [["", "ID"]]) is True
+
+
+def test_nothing_at_all_blocks_the_run():
+    assert dlg.has_work([], []) is False
+
+
+def test_an_empty_filter_does_not_count_as_work():
+    """Hicbir kutusu dolu olmayan filtre zaten eklenemez; sayilmamali."""
+    assert dlg.has_work([], [["", "", ""]]) is False
+
+
+def test_blank_names_do_not_count():
+    assert dlg.has_work(["", "   "], []) is False
