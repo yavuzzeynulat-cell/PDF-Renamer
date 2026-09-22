@@ -86,3 +86,29 @@ def test_the_reason_names_every_file_that_forced_it():
     assert "launcher.py" in reason
     assert "requirements.txt" in reason
     assert "gui.py" not in reason, "derlemeyi zorlamayan dosya sebepte olmamali"
+
+
+# -- Inno Setup'i bulma ------------------------------------------------------
+
+def test_the_compiler_is_found_on_the_path(monkeypatch):
+    monkeypatch.setattr(publish_update.shutil, "which",
+                        lambda name: r"C:\bin\ISCC.exe")
+    assert publish_update.find_iscc() == r"C:\bin\ISCC.exe"
+
+
+def test_the_usual_install_folder_is_searched_when_the_path_misses(monkeypatch, tmp_path):
+    """GERCEK OLAY: Inno Setup kullanici klasorune kurulmustu ve PATH'te
+    yoktu; yayinlama, EXE derlendikten SONRA "iscc bulunamadi" deyip
+    yarida kaldi."""
+    monkeypatch.setattr(publish_update.shutil, "which", lambda name: None)
+    exe = tmp_path / "Inno Setup 6" / "ISCC.exe"
+    exe.parent.mkdir(parents=True)
+    exe.write_text("")
+    monkeypatch.setattr(publish_update, "ISCC_DIRS", [str(tmp_path)])
+    assert publish_update.find_iscc() == str(exe)
+
+
+def test_nothing_found_returns_empty(monkeypatch, tmp_path):
+    monkeypatch.setattr(publish_update.shutil, "which", lambda name: None)
+    monkeypatch.setattr(publish_update, "ISCC_DIRS", [str(tmp_path)])
+    assert publish_update.find_iscc() == ""

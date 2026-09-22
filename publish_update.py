@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -148,6 +149,31 @@ def _run(cmd, cwd):
     return subprocess.run(cmd, cwd=cwd)
 
 
+# Inno Setup kendini PATH'e EKLEMEZ. Olculdu: kullanici klasorune kurulmustu
+# ve yayinlama, EXE tam derlendikten SONRA "iscc bulunamadi" deyip yarida
+# kaldi -- en pahali adimdan sonra, en ucuz sebeple.
+ISCC_DIRS = [
+    os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs"),
+    os.environ.get("PROGRAMFILES", ""),
+    os.environ.get("PROGRAMFILES(X86)", ""),
+]
+
+
+def find_iscc() -> str:
+    """Inno Setup derleyicisinin yolu; bulunamazsa bos dize."""
+    found = shutil.which("iscc")
+    if found:
+        return found
+    for base in ISCC_DIRS:
+        if not base:
+            continue
+        for name in ("Inno Setup 6", "Inno Setup 5"):
+            path = os.path.join(base, name, "ISCC.exe")
+            if os.path.isfile(path):
+                return path
+    return ""
+
+
 def build_exe_and_installer(root: str) -> str:
     """EXE'yi ve kurulum dosyasini derler. Hata varsa aciklamasi doner.
 
@@ -164,16 +190,16 @@ def build_exe_and_installer(root: str) -> str:
     # Ayni listeden beslenir, yoksa ikisi birbirinden kayar.
     dist_src = os.path.join(root, "dist", "PDF-Renamer", "src")
     os.makedirs(dist_src, exist_ok=True)
-    import shutil
     for name in SRC_FILES:
         shutil.copy2(os.path.join(root, name), os.path.join(dist_src, name))
     print(f"src/ -> {dist_src}")
 
     print("\n=== Kurulum dosyasi olusturuluyor ===")
-    if not shutil.which("iscc"):
-        return ("Inno Setup bulunamadi (iscc). "
+    iscc = find_iscc()
+    if not iscc:
+        return ("Inno Setup bulunamadi (ISCC.exe). "
                 "https://jrsoftware.org/isdl.php")
-    r = _run(["iscc", "installer.iss"], root)
+    r = _run([iscc, "installer.iss"], root)
     if r.returncode != 0:
         return "Inno Setup derlemesi basarisiz."
     return ""
